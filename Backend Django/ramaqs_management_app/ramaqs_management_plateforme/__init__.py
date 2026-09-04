@@ -1,0 +1,1 @@
+default_app_config = 'ramaqs_management_plateforme.apps.RamaqsManagementPlateformeConfig'

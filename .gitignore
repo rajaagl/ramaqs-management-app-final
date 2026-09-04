@@ -1,0 +1,58 @@
+# ==========================
+# Backend Django
+# ==========================
+Backend Django/**/.env
+Backend Django/**/.env.*
+Backend Django/**/*.env
+Backend Django/**/.env.local
+Backend Django/**/.env.production
+
+Backend Django/**/__pycache__/
+Backend Django/**/*.py[cod]
+Backend Django/**/*.pyo
+Backend Django/**/*.pyd
+Backend Django/**/*.pdb
+Backend Django/**/db.sqlite3
+Backend Django/**/media/
+Backend Django/**/staticfiles/
+
+# environnement virtuel Python (le dossier venv qui est DANS Backend Django)
+Backend Django/ramaqs-management-app/
+Backend Django/venv/
+Backend Django/env/
+Backend Django/.venv/
+
+Backend Django/**/*.log
+Backend Django/**/logs/
+
+# ==========================
+# Frontend
+# ==========================
+ramaqs-management-app/node_modules/
+ramaqs-management-app/dist/
+ramaqs-management-app/dist-ssr/
+ramaqs-management-app/*.local
+ramaqs-management-app/.env
+ramaqs-management-app/.env.*
+ramaqs-management-app/*.env
+ramaqs-management-app/.env.local
+
+ramaqs-management-app/.nitro
+ramaqs-management-app/.tanstack
+ramaqs-management-app/.wrangler
+ramaqs-management-app/.output
+ramaqs-management-app/.vinxi
+ramaqs-management-app/__unconfig*
+ramaqs-management-app/todos.json
+ramaqs-management-app/.prettier*
+ramaqs-management-app/.eslintcache
+
+# ==========================
+# Général / éditeurs
+# ==========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+logs/
