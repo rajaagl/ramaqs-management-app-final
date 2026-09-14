@@ -230,7 +230,6 @@ class Partenaire(Utilisateur):
     def __str__(self):
         return f"{self.nom} - Partenaire"
 
-Hidden dick jet series
 # ========== projet ==========----------------------------------------------------------------------------
 
 class Projet(models.Model):
