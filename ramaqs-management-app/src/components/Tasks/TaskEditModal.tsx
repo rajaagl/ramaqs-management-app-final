@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Save, Loader2, Users, Briefcase, Calendar, Flag, AlertCircle, Clock, CheckCircle, XCircle, Info } from "lucide-react";
 import { usePatchTacheMutation, useGetConsultantsQuery, useGetProjetsQuery } from "../../store/api/api";
 import { useAppSelector } from "../../store/store";
+import { API_BASE_URL } from "../../config/endpoints";
 
 interface TaskEditModalProps {
   task: any;
@@ -124,7 +125,7 @@ export function TaskEditModal({ task, onClose, onSuccess }: TaskEditModalProps) 
   // ✅ Approuver la tâche
   const handleApproveTask = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/taches/${task.id}/approuver_validation/`, {
+      const response = await fetch(`${API_BASE_URL}/taches/${task.id}/approuver_validation/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
@@ -150,7 +151,7 @@ export function TaskEditModal({ task, onClose, onSuccess }: TaskEditModalProps) 
     if (justification === null) return;
     
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/taches/${task.id}/rejeter_validation/`, {
+      const response = await fetch(`${API_BASE_URL}/taches/${task.id}/rejeter_validation/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,

@@ -3,7 +3,6 @@ import logging
 from datetime import timedelta
 from django.utils.timezone import now as timezone_now
 from ..models import Notification, Utilisateur
-from ..utils.tenant import get_current_tenant
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -49,13 +48,9 @@ class NotificationService:
             date_envoi__gte=dix_secondes,
         ).exists()
         if deja_existant:
-           print(f"[NOTIF] ⏭ Doublon ignoré → {utilisateur.email} | {titre}")
            return None
 
-        tenant = get_current_tenant()
-        print(f"[NOTIF] ▶ creer_notification → {utilisateur.email} | {titre}")
         notification = Notification.objects.create(
-            tenant=tenant,
             utilisateur=utilisateur,
             titre=titre,
             message=message,
@@ -65,11 +60,10 @@ class NotificationService:
             entite_type=entite_type,
             projet=projet,
         )
-        print(f"[NOTIF]  notification créée id={notification.id}")
         try:
             envoyer_notification_ws(utilisateur.id, notification)
         except Exception as e:
-           print(f"[WS]  Push échoué pour {utilisateur.id}: {e}")
+            logger.error(f"Erreur lors de l'envoi de la notification WS : {e}")
         return notification
     # ─────────────────────────────────────────────────────────────────────────
     # HELPERS PRIVÉS
@@ -520,62 +514,3 @@ class NotificationService:
             type_notif='erreur',
         )
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # NOUVEAU — NOTIFICATIONS MESSAGERIE (chat interne)
-    # ─────────────────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def notifier_nouveau_message(message_obj, expediteur):
-        """
-        Notifie les participants d'une conversation qu'un nouveau message
-        a été envoyé. Appelée dans MessageViewSet.perform_create().
-        """
-        conversation = message_obj.conversation
-        titre        = f"Nouveau message — {conversation.titre or 'Conversation'}"
-        message_text = (
-            f"{expediteur.nom} : "
-            f"{message_obj.contenu[:60]}{'...' if len(message_obj.contenu) > 60 else ''}"
-        )
-
-        # Notifier tous les participants sauf l'expéditeur
-        participants = conversation.participants.all() if hasattr(conversation, 'participants') else []
-        for participant in participants:
-            if participant != expediteur:
-                NotificationService.creer_notification(
-                    utilisateur=participant,
-                    titre=titre,
-                    message=message_text,
-                    type_notif='info',
-                    lien_action=f"/app/messagerie/{conversation.id}",
-                    entite_id=conversation.id,
-                    entite_type='conversation',
-                )
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # NOUVEAU — CONFIRMATION WHATSAPP ENVOYÉ (pour la direction)
-    # ─────────────────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def notifier_whatsapp_envoye(destinataire_utilisateur, type_message='mot_de_passe'):
-        """
-        Notifie la DIRECTION qu'un message WhatsApp a été envoyé à un utilisateur.
-        Appelée après un envoi réussi via WhatsAppService.
-        
-        Paramètre type_message : 'mot_de_passe' | 'confirmation' | 'autre'
-        """
-        labels = {
-            'mot_de_passe': 'mot de passe temporaire',
-            'confirmation': 'confirmation de changement de mot de passe',
-            'autre':        'message',
-        }
-        label = labels.get(type_message, 'message')
-        titre   = "WhatsApp envoyé"
-        message = (
-            f"Un {label} a été envoyé par WhatsApp à "
-            f"{destinataire_utilisateur.nom} ({destinataire_utilisateur.telephone})."
-        )
-        NotificationService._notifier_direction(
-            titre=titre,
-            message=message,
-            type_notif='info',
-        )

@@ -1,5 +1,6 @@
 // src/store/slices/documentsSlice.ts
-import { createSlice,type PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
+import type {PayloadAction} from '@reduxjs/toolkit';
 
 interface DocumentsState {
   selectedDocument: any | null;

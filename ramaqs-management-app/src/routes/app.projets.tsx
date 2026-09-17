@@ -4,7 +4,12 @@ import { AppShell } from "@/components/AppShell";
 import { 
   Plus, Filter, LayoutGrid, List as ListIcon, Search, 
   Edit, Trash2, Eye, Calendar, Users, DollarSign, 
-  CheckCircle, Clock, AlertCircle, X, Loader2, FileSpreadsheet
+  CheckCircle, Clock, AlertCircle, X, Loader2, FileSpreadsheet, 
+  Briefcase,
+  User
+, 
+  FileText, RefreshCw,  PauseCircle, AlertTriangle 
+
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useGetProjetsQuery, useDeleteProjetMutation, useGetChefsProjetQuery } from '../store/api/api';
@@ -16,13 +21,6 @@ import { EditProjectModal } from "../components/Projects/EditProjectModal";
 import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
 import { ImportExcelModal } from "../components/Projects/ImportExcelModal";
 import { EquipeProjetModal } from "../components/Projects/EquipeProjetModal";
-import { 
-  Briefcase,
-  User
-} from "lucide-react";
-import { 
-  FileText, RefreshCw,  PauseCircle, AlertTriangle 
-} from "lucide-react";
 
 
 type ViewMode = "grid" | "list";
@@ -101,7 +99,7 @@ function ProjetsPage() {
     const chefIds = getChefIds(project);
 
     // Filtre par rôle — défensif : compare sur le tableau de chefs, pas un seul id
-    //if (userRole === 'chef_projet') {
+    // if (userRole === 'chef_projet') {
      // if (!chefIds.includes(user?.id)) return false;
    // }
 

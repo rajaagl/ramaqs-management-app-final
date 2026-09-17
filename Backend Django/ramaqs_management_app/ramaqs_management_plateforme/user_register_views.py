@@ -1,26 +1,24 @@
 # ramaqs_management_plateforme/user_register_views.py
 
 import logging
-import uuid
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils import timezone
-from django.contrib.auth.hashers import make_password
-from .models import Utilisateur, TenantMembership, Tenant
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from .models import Utilisateur
 from .serializers import UtilisateurSerializer
 from .services.notification_service import NotificationService
 from .services.email_service import EmailService
-import secrets
 from .services.whatsapp_service import WhatsAppService
 from django.conf import settings
+from .permissions import is_direction
 
 # ✅ Configuration du logger
 logger = logging.getLogger(__name__)
 
-print("=" * 60)
-print("📁 CHARGEMENT DU FICHIER: user_register_views.py")
-print("=" * 60)
+
 
 
 class UserRegisterView(generics.CreateAPIView):
@@ -32,12 +30,7 @@ class UserRegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
     
     def create(self, request, *args, **kwargs):
-        print("=" * 60)
-        print("📝 [UserRegisterView.create] APPELÉE")
-        print(f"📥 Méthode HTTP: {request.method}")
-        print(f"📥 Données reçues: {request.data}")
-        print(f"📥 Headers: {dict(request.headers)}")
-        print("=" * 60)
+        
         
         email = request.data.get('email')
         role = request.data.get('role')
@@ -51,7 +44,7 @@ class UserRegisterView(generics.CreateAPIView):
         
         # 1️⃣ Vérifie si l'email existe déjà
         if Utilisateur.objects.filter(email=email).exists():
-            logger.warning(f"❌ Email déjà utilisé: {email}")
+            
             return Response(
                 {'error': 'Cet email est déjà utilisé'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -60,13 +53,20 @@ class UserRegisterView(generics.CreateAPIView):
         # 2️⃣ Vérifie que le rôle est valide
         roles_avec_approbation = ['chef_projet', 'consultant', 'partenaire', 'client']
         if role not in roles_avec_approbation:
-            logger.warning(f"❌ Rôle non valide: {role}")
+            
             return Response(
                 {'error': f'Rôle non valide. Les rôles autorisés sont: {", ".join(roles_avec_approbation)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        if not password:
+            return Response({'error': 'Le mot de passe est requis'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(password)
+        except ValidationError as exc:
+            return Response({'error': list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
         
-        logger.info(f"✅ Rôle valide: {role}")
+       
         
        
         user_data = {
@@ -81,16 +81,16 @@ class UserRegisterView(generics.CreateAPIView):
             'is_active': False,                  
         }
         
-        logger.info(f"📦 Création utilisateur avec les données: {user_data}")
+        
         
         # 4️⃣ Crée l'utilisateur dans la base de données
         try:
             serializer = self.get_serializer(data=user_data)
             serializer.is_valid(raise_exception=True)
             user = serializer.save()
-            logger.info(f" Utilisateur créé avec succès: id={user.id}, email={user.email}")
+           
         except Exception as e:
-            logger.error(f" Erreur création utilisateur: {str(e)}")
+            
             return Response(
                 {'error': f'Erreur lors de la création: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -102,32 +102,10 @@ class UserRegisterView(generics.CreateAPIView):
             user.save()
         
 
-        # ✅ CORRECTION DU TENANT
-        # ============================================================
-        from ramaqs_management_plateforme.models import Tenant, TenantMembership
-        
-        # Récupérer le tenant existant
-        tenant = Tenant.objects.first()
-        
-        # S'il n'y a pas de tenant, en créer un
-        if not tenant:
-            import uuid
-            tenant = Tenant.objects.create(
-                id=uuid.uuid4(),
-                nom="RAMAQS Consulting",
-                slug="ramaqs",
-                domaine="ramaqs.com"
-            )
-            print(f" Tenant RAMAQS créé: {tenant.nom}")
-        
-        # Créer le membership (indispensable pour que l'utilisateur apparaisse)
-        TenantMembership.objects.create(
-            user=user,
-            tenant=tenant,
-            role=role
-        )
-        print(f"Utilisateur {user.email} lié au tenant: {tenant.nom}")
-        # ============================================================
+        user.role = role
+        user.statut_approbation = 'pending'
+        user.is_active = False
+        user.save(update_fields=['role', 'statut_approbation', 'is_active'])
        
        
        
@@ -158,9 +136,7 @@ class UserRegisterView(generics.CreateAPIView):
             except Exception as e:
                 logger.error(f"Erreur envoi notification à {admin.email}: {str(e)}")
         
-        print("=" * 60)
-        print(" [UserRegisterView] RÉPONSE ENVOYÉE AVEC SUCCÈS")
-        print("=" * 60)
+        
         
         return Response({
             'message': f'Votre demande a été envoyée. Un administrateur va valider votre compte.',
@@ -174,24 +150,18 @@ class UserApproveRejectView(generics.UpdateAPIView):
     Vue pour approuver ou rejeter un utilisateur (Direction uniquement).
     Gère tous les rôles : chef_projet, consultant, partenaire, client.
     """
-    queryset = Utilisateur.objects.exclude(role='direction')
+    queryset = Utilisateur.objects.exclude(role__in=['direction', 'super_admin'])
     serializer_class = UtilisateurSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         logger.info(f" [UserApproveRejectView] get_queryset appelé")
-        qs = Utilisateur.objects.exclude(role='direction')
+        qs = Utilisateur.objects.exclude(role__in=['direction', 'super_admin'])
         logger.info(f" Queryset count: {qs.count()}")
         return qs
     
     def update(self, request, *args, **kwargs):
-        print("=" * 60)
-        print(" [UserApproveRejectView.update] APPELÉE")
-        print(f" Méthode HTTP: {request.method}")
-        print(f" Données reçues: {request.data}")
-        print(f" Utilisateur connecté: {request.user.email} (role: {request.user.role})")
-        print(f" kwargs: {kwargs}")
-        print("=" * 60)
+        
         
         user = self.get_object()
         action = request.data.get('action')
@@ -201,7 +171,7 @@ class UserApproveRejectView(generics.UpdateAPIView):
         logger.info(f"Action demandée: {action}")
         
         
-        if request.user.role != 'direction':
+        if not is_direction(request.user):
             logger.warning(f"Utilisateur non autorisé: {request.user.role}")
             return Response(
                 {'error': 'Vous n\'avez pas les droits pour cette action'},
@@ -225,17 +195,13 @@ class UserApproveRejectView(generics.UpdateAPIView):
     def _approve_user(self, user, admin_user):
         logger.info(f" [Approve] Début approbation de {user.email}")
         
-        temp_password = secrets.token_urlsafe(10)
-        logger.info(f" Mot de passe temporaire généré: {temp_password}")
-        
         # Met à jour le statut de l'utilisateur
         user.statut_approbation = 'approved'
         user.date_approbation = timezone.now()
         user.approuve_par = admin_user
         user.is_active = True  
         user.actif = True  
-        user.doit_changer_mot_de_passe = True  
-        user.set_password(temp_password)
+        user.doit_changer_mot_de_passe = False
         user.save()
         
         logger.info(f"Utilisateur mis à jour: statut=approved, is_active=True")
@@ -250,7 +216,7 @@ class UserApproveRejectView(generics.UpdateAPIView):
         role_label = role_labels.get(user.role, user.role)
     
         try:
-            EmailService.send_approval_email(user, temp_password, role_label)
+            EmailService.send_approval_email(user, role_label)
             logger.info(f"Email d'approbation envoyé à {user.email}")
         except Exception as e:
             logger.error(f"Erreur envoi email: {str(e)}")
@@ -271,17 +237,6 @@ class UserApproveRejectView(generics.UpdateAPIView):
             logger.error(f"Erreur notification utilisateur: {str(e)}")
 
         
-        if settings.WHATSAPP_ENABLED:
-            try:
-                whatsapp = WhatsAppService()
-                if whatsapp.is_available():
-                    whatsapp.send_approval_notification(user, temp_password, role_label)
-                    logger.info(f" WhatsApp envoyé à {user.telephone}")
-                else:
-                    logger.warning(f"⚠️ WhatsApp non disponible")
-            except Exception as e:
-                logger.error(f"❌ Erreur WhatsApp: {str(e)}")
-        
        
         try:
             NotificationService.creer_notification(
@@ -298,7 +253,7 @@ class UserApproveRejectView(generics.UpdateAPIView):
             logger.error(f" Erreur notification admin: {str(e)}")
         
         
-        print(f"[Approve] Utilisateur {user.email} APPROUVÉ avec succès")
+        
         
         
         return Response({
@@ -355,7 +310,7 @@ class UserApproveRejectView(generics.UpdateAPIView):
             logger.error(f"Erreur notification: {str(e)}")
         
         
-        print(f" [Reject] Utilisateur {user.email} REJETÉ")
+       
         
         
     
@@ -386,17 +341,12 @@ class UserListView(generics.ListAPIView):
         logger.info(f" [UserListView] Utilisateur connecté: {user.email} (role: {user.role})")
         
         # Seule la direction peut voir cette liste
-        if user.role != 'direction':
+        if not (user.is_superuser or user.role in {'super_admin', 'direction'}):
             logger.warning(f" Accès refusé: {user.role} n'est pas direction")
             return Utilisateur.objects.none()
         
-        tenant = self.request.tenant if hasattr(self.request, 'tenant') else None
-        logger.info(f"Tenant: {tenant}")
-        
         # Exclut la direction elle-même
-        queryset = Utilisateur.objects.filter(
-            memberships__tenant=tenant
-        ).exclude(
+        queryset = Utilisateur.objects.exclude(
             role='direction'
         ).order_by('-date_creation')
         
@@ -428,8 +378,3 @@ class UserListView(generics.ListAPIView):
             'results': serializer.data,
             'stats': stats
         })
-
-
-
-print("FIN DU CHARGEMENT: user_register_views.py")
-print("Classes exportées: UserRegisterView, UserApproveRejectView, UserListView")

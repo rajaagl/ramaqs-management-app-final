@@ -5,8 +5,6 @@
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
-const TENANT_KEY = 'current_tenant';
-const TENANT_SLUG_KEY = 'tenant_slug';
 const USER_KEY = 'auth_user';
 
 // ✅ AJOUTER CES FONCTIONS
@@ -109,29 +107,10 @@ export const getUserRoleFromToken = (): string | null => {
   return decoded?.role || decoded?.user_role || null;
 };
 
-// ========== TENANT ==========
-
-// Récupérer le tenant actuel
-export const getCurrentTenant = (): string | null => {
-  return localStorage.getItem(TENANT_KEY) || localStorage.getItem(TENANT_SLUG_KEY);
-};
-
-// Définir le tenant actuel
-export const setCurrentTenant = (tenantSlug: string): void => {
-  localStorage.setItem(TENANT_KEY, tenantSlug);
-  localStorage.setItem(TENANT_SLUG_KEY, tenantSlug);
-};
-
-// Supprimer le tenant
-export const clearTenant = (): void => {
-  localStorage.removeItem(TENANT_KEY);
-  localStorage.removeItem(TENANT_SLUG_KEY);
-};
-
 // ========== DÉCONNEXION COMPLÈTE ==========
 
 // Déconnexion complète (supprime tout)
 export const logout = (): void => {
   removeToken();
-  clearTenant();
+  removeUserFromStorage();
 };

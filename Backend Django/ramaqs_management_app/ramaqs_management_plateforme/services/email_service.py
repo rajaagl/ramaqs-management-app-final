@@ -9,17 +9,9 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 class EmailService:
-    
     @staticmethod
-    def send_approval_email(user, temp_password, role_label):
-        """Envoyer email d'approbation avec identifiants"""
-        print("=" * 60)
-        print("📧 [send_approval_email] Début de l'envoi")
-        print(f"   Destinataire: {user.email}")
-        print(f"   Nom: {user.nom}")
-        print(f"   Rôle: {role_label}")
-        print(f"   Mot de passe temporaire: {temp_password}")
-        print("=" * 60)
+    def send_approval_email(user, role_label):
+        """Informer l'utilisateur que son compte peut désormais être utilisé."""
         
         try:
             html_message = f"""
@@ -47,10 +39,8 @@ class EmailService:
                     <p>Bonjour <strong>{user.nom}</strong>,</p>
                     <p>Nous avons le plaisir de vous informer que votre demande d'inscription en tant que <strong>{role_label}</strong> a été <strong style="color: #10b981;">APPROUVÉE</strong>.</p>
                     <div class="info">
-                        <p><strong> Vos identifiants de connexion :</strong></p>
-                        <p> Email : <strong>{user.email}</strong></p>
-                        <p> Mot de passe temporaire : <strong>{temp_password}</strong></p>
-                        <p style="margin-top: 10px; font-size: 12px; color: #666;">⚠️ Merci de changer votre mot de passe lors de votre première connexion.</p>
+                        <p>Votre compte est maintenant actif. Utilisez le mot de passe choisi lors de votre inscription.</p>
+                        <p>Si vous l'avez oublié, utilisez la procédure « Mot de passe oublié ».</p>
                     </div>
                     <div style="text-align: center; margin: 24px 0;">
                           <a href="{settings.FRONTEND_URL}/login"
@@ -68,11 +58,6 @@ class EmailService:
             </html>
             """
             
-            print("📧 Envoi de l'email via SMTP...")
-            print(f"   From: siteweb@ramaqs.ma")
-            print(f"   To: {user.email}")
-            print(f"   Subject: ✅ Votre compte RAMAQS Consulting a été approuvé")
-            
             result = send_mail(
                 subject=f'✅ Votre compte RAMAQS Consulting a été approuvé',
                 message=strip_tags(html_message),
@@ -82,27 +67,17 @@ class EmailService:
                 fail_silently=False,
             )
             
-            print(f"✅ Email envoyé avec succès! Résultat: {result}")
-            print("=" * 60)
+           
             logger.info(f"Email d'approbation envoyé à {user.email}")
             return True
             
         except Exception as e:
-            print(f"❌ ERREUR lors de l'envoi de l'email: {str(e)}")
-            print("=" * 60)
             logger.error(f"Erreur envoi email approbation à {user.email}: {str(e)}")
             return False
     
     @staticmethod
     def send_rejection_email(user, justification, role_label):
         """Envoyer email de rejet"""
-        print("=" * 60)
-        print("📧 [send_rejection_email] Début de l'envoi")
-        print(f"   Destinataire: {user.email}")
-        print(f"   Nom: {user.nom}")
-        print(f"   Rôle: {role_label}")
-        print(f"   Justification: {justification}")
-        print("=" * 60)
         
         try:
             html_message = f"""
@@ -143,8 +118,6 @@ class EmailService:
             </html>
             """
             
-            print("📧 Envoi de l'email de rejet via SMTP...")
-            
             result = send_mail(
                 subject='Votre demande d\'inscription RAMAQS Consulting',
                 message=strip_tags(html_message),
@@ -153,14 +126,10 @@ class EmailService:
                 html_message=html_message,
                 fail_silently=False,
             )
-            
-            print(f"✅ Email de rejet envoyé avec succès! Résultat: {result}")
-            print("=" * 60)
+
             logger.info(f"Email de rejet envoyé à {user.email}")
             return True
             
         except Exception as e:
-            print(f"❌ ERREUR lors de l'envoi de l'email de rejet: {str(e)}")
-            print("=" * 60)
             logger.error(f"Erreur envoi email rejet à {user.email}: {str(e)}")
             return False

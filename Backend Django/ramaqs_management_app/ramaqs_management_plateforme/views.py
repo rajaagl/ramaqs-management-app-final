@@ -1,9 +1,5 @@
 from datetime import datetime, date
-import threading
-import channels
-import channels
-from django.shortcuts import render
-from .permissions import IsTenantAuthenticated, IsTenantMember, IsTenantAdmin
+from .permissions import IsDirectionUser, IsEligibleUser, IsProjectMemberReadOnly, IsTaskMember, is_direction
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import viewsets, generics
 from rest_framework.decorators import action
@@ -19,16 +15,15 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.conf import settings
-from django.template.loader import render_to_string
-from django.utils.html import strip_tags
 import secrets
 from datetime import timedelta
 from .models import Utilisateur, PasswordResetToken
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend  
 from rest_framework import filters
 from django.db import models  
@@ -44,24 +39,47 @@ import openpyxl
 from rest_framework.parsers import MultiPartParser
 from .models import Projet, Utilisateur
 from django.utils.dateparse import parse_date
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import generics
 from rest_framework.response import Response
 from .models import Tache
 
 logger = logging.getLogger(__name__)
+
+
+def validate_profile_photo(upload):
+    """Refuse les fichiers qui ne sont pas de vraies images JPEG ou PNG."""
+    if upload.size > 5 * 1024 * 1024:
+        raise ValidationError("La photo de profil ne doit pas dépasser 5 Mo.")
+    if upload.content_type not in {'image/jpeg', 'image/png'}:
+        raise ValidationError("Seules les images JPEG et PNG sont autorisées.")
+
+    try:
+        from PIL import Image, UnidentifiedImageError
+
+        image = Image.open(upload)
+        if image.format not in {'JPEG', 'PNG'}:
+            raise ValidationError("Le contenu du fichier ne correspond pas à une image autorisée.")
+        if image.width * image.height > 20_000_000:
+            raise ValidationError("La résolution de l'image est trop élevée.")
+        image.verify()
+    except (ImportError, UnidentifiedImageError, OSError, ValueError) as exc:
+        raise ValidationError("Le fichier image est invalide.") from exc
+    finally:
+        upload.seek(0)
 from .models import (
     Projet, RoleChoices, Tache, Consultant, Client, ChefProjet, 
     Partenaire, Direction, Ressource, SousTache, 
-    Document, Commentaire, Notification, Conversation, 
-    Kpi, Message, Budget, TenantMembership,
+    Document, Commentaire, Notification,
+    Kpi, Budget,
     Direction, ChefProjet, Consultant, Client, Partenaire, 
-    Tenant, RoleChoices
+    RoleChoices
 )
 from .serializers import (
     ProjetSerializer, TacheSerializer, 
     ConsultantSerializer, ClientSerializer,
-    MessageSerializer,
-    BudgetSerializer, ConversationSerializer,
+    BudgetSerializer,
     CommentaireSerializer, DirectionSerializer,
     DocumentSerializer, NotificationSerializer,
     PartenaireSerializer, RessourceSerializer,
@@ -71,23 +89,16 @@ from .serializers import (
 )
 
 
-# ========== VIEWSETS AVEC FILTRAGE TENANT ==========
+# ========== VIEWSETS PROTÉGÉS ==========
 
-class BaseTenantViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet de base qui filtre automatiquement par tenant
-    """
-    permission_classes = [IsAuthenticated]
+class BaseProtectedViewSet(viewsets.ModelViewSet):
+    """Ressources administratives réservées à la direction."""
+    permission_classes = [IsDirectionUser]
     
     def get_queryset(self):
         return self.queryset.all()
     
-    def perform_create(self, serializer):
-        """Assigne automatiquement le tenant à la création"""
-        serializer.save(tenant=self.request.tenant)
-
-
-class ProjetViewSet(BaseTenantViewSet):
+class ProjetViewSet(BaseProtectedViewSet):
     queryset = Projet.objects.all()
     serializer_class = ProjetSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -103,17 +114,23 @@ class ProjetViewSet(BaseTenantViewSet):
     }
     
     # Recherche texte
-    search_fields = ['nom', 'description', 'code', 'client__nom']
+    search_fields = ['nom', 'description', 'client__nom']
     
     # Tri
     ordering_fields = ['nom', 'date_debut', 'date_fin_prevue', 'avancement_globale', 'budget']
     ordering = ['-date_debut']
+    permission_classes = [IsProjectMemberReadOnly]
+
+    def get_permissions(self):
+        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
+            return [IsDirectionUser()]
+        return [IsProjectMemberReadOnly()]
 
     def get_queryset(self):
         user = self.request.user
        
        
-        if user.role == 'direction':
+        if is_direction(user):
             return Projet.objects.all()
         
         if user.role == 'chef_projet':
@@ -138,7 +155,7 @@ class ProjetViewSet(BaseTenantViewSet):
         (chefs de projet, consultants assignés aux tâches, partenaires, client).
         Réservé à la direction.
         """
-        if request.user.role != 'direction':
+        if not is_direction(request.user):
             return Response(
                 {'error': 'Accès réservé à la direction.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -194,7 +211,7 @@ class ProjetViewSet(BaseTenantViewSet):
             'membres': list(membres.values()),
         })
 
-class TacheViewSet(BaseTenantViewSet):
+class TacheViewSet(BaseProtectedViewSet):
     queryset = Tache.objects.all()
     serializer_class = TacheSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -210,6 +227,14 @@ class TacheViewSet(BaseTenantViewSet):
     
     search_fields = ['titre', 'description']
     ordering_fields = ['date_fin_prevue', 'avancement', 'priorite']
+    permission_classes = [IsTaskMember]
+
+    def perform_create(self, serializer):
+        projet = serializer.validated_data['projet']
+        if not is_direction(self.request.user) and not projet.chef_projet.filter(id=self.request.user.id).exists():
+            raise PermissionDenied("Seule la direction ou le chef du projet peut créer une tâche.")
+        task = serializer.save()
+        serializer.mettre_a_jour_avancement_projet(task.projet)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -221,7 +246,7 @@ class TacheViewSet(BaseTenantViewSet):
         role = user.role
         queryset = Tache.objects.all()
         
-        if role == 'direction':
+        if is_direction(user):
             return queryset
         elif role == 'chef_projet':
             return queryset.filter(projet__chef_projet=user)
@@ -238,28 +263,51 @@ class TacheViewSet(BaseTenantViewSet):
         
         # Vérification supplémentaire des permissions (optionnel)
         user = self.request.user
-        tenant = self.request.tenant
-        role = user.get_role_in_tenant(tenant) if hasattr(user, 'get_role_in_tenant') else None
+        role = user.role
         
         # Seuls direction et chef_projet peuvent supprimer
-        if role not in ['direction', 'chef_projet']:
+        if not is_direction(user) and role != 'chef_projet':
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Vous n'avez pas la permission de supprimer cette tâche")
         
+        projet = instance.projet
         # Suppression réelle
         instance.delete()
+        TacheSerializer().mettre_a_jour_avancement_projet(projet)
         logger.info(f"Tâche {instance.id} supprimée avec succès")
     def update(self, request, *args, **kwargs):
-        """Contrôle des permissions pour la mise à jour (drag & drop)"""
-        user = request.user
-        role = user.role
-       
-        print("[update] Données reçues du frontend:", dict(request.data))
-        print("[update] Clés reçues:", list(request.data.keys()))
-        print("[update] Rôle:", role)
-        
-        
+        instance = self.get_object()
+        if not is_direction(request.user) and not instance.projet.chef_projet.filter(id=request.user.id).exists():
+            forbidden = {
+                'projet', 'consultant', 'titre', 'description', 'priorite',
+                'date_debut', 'date_fin_prevue', 'date_fin_reelle', 'statut',
+            }
+            if forbidden.intersection(request.data.keys()):
+                raise PermissionDenied("Un consultant ne peut modifier que l'avancement de sa propre tâche.")
         return super().update(request, *args, **kwargs)
+
+    def _can_validate(self, user, task):
+        return is_direction(user) or task.projet.chef_projet.filter(id=user.id).exists()
+
+    @action(detail=True, methods=['post'], url_path='approuver_validation')
+    def approuver_validation(self, request, pk=None):
+        task = self.get_object()
+        if not self._can_validate(request.user, task):
+            raise PermissionDenied("Seule la direction ou le chef du projet peut approuver une tâche.")
+        if not task.approuver_validation():
+            return Response({'detail': "La tâche n'est pas en attente de validation."}, status=status.HTTP_400_BAD_REQUEST)
+        TacheSerializer().mettre_a_jour_avancement_projet(task.projet)
+        return Response(self.get_serializer(task).data)
+
+    @action(detail=True, methods=['post'], url_path='rejeter_validation')
+    def rejeter_validation(self, request, pk=None):
+        task = self.get_object()
+        if not self._can_validate(request.user, task):
+            raise PermissionDenied("Seule la direction ou le chef du projet peut rejeter une tâche.")
+        if not task.rejeter_validation():
+            return Response({'detail': "La tâche n'est pas en attente de validation."}, status=status.HTTP_400_BAD_REQUEST)
+        TacheSerializer().mettre_a_jour_avancement_projet(task.projet)
+        return Response(self.get_serializer(task).data)
 
     
     def destroy(self, request, *args, **kwargs):
@@ -274,32 +322,32 @@ class TacheViewSet(BaseTenantViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class ConsultantViewSet(BaseTenantViewSet):
+class ConsultantViewSet(BaseProtectedViewSet):
     queryset = Consultant.objects.all()
     serializer_class = ConsultantSerializer
 
 
-class ClientViewSet(BaseTenantViewSet):
+class ClientViewSet(BaseProtectedViewSet):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
 
 
-class ChefProjetViewSet(BaseTenantViewSet):
+class ChefProjetViewSet(BaseProtectedViewSet):
     queryset = ChefProjet.objects.all()
     serializer_class = ChefProjetSerializer
 
 
-class DirectionViewSet(BaseTenantViewSet):
+class DirectionViewSet(BaseProtectedViewSet):
     queryset = Direction.objects.all()
     serializer_class = DirectionSerializer
 
 
-class PartenaireViewSet(BaseTenantViewSet):
+class PartenaireViewSet(BaseProtectedViewSet):
     queryset = Partenaire.objects.all()
     serializer_class = PartenaireSerializer
 
 
-class RessourceViewSet(BaseTenantViewSet):
+class RessourceViewSet(BaseProtectedViewSet):
     queryset = Ressource.objects.all()
     serializer_class = RessourceSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -324,7 +372,7 @@ class RessourceViewSet(BaseTenantViewSet):
         
 
 
-class SousTacheViewSet(BaseTenantViewSet):
+class SousTacheViewSet(BaseProtectedViewSet):
     queryset = SousTache.objects.all()
     serializer_class = SousTacheSerializer
     
@@ -332,46 +380,47 @@ class SousTacheViewSet(BaseTenantViewSet):
 
 
 
+def documents_accessibles_a(user):
+    """Single source of truth for document visibility, including downloads."""
+    qs = Document.objects.select_related('projet', 'uploaded_by')
+    if is_direction(user):
+        return qs
+    if user.role == 'chef_projet':
+        return qs.filter(projet__chef_projet=user)
+    if user.role == 'consultant':
+        projets_ids = Tache.objects.filter(consultant=user).values_list('projet_id', flat=True).distinct()
+        return qs.filter(projet_id__in=projets_ids).filter(models.Q(type='livrable') | models.Q(uploaded_by=user))
+    if user.role == 'partenaire':
+        return qs.filter(projet__partenaires=user).filter(models.Q(type='livrable') | models.Q(uploaded_by=user))
+    if user.role == 'client':
+        return qs.filter(projet__client=user).filter(models.Q(type='livrable') | models.Q(uploaded_by=user))
+    return qs.none()
+
+
 class DocumentViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentSerializer
     parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsEligibleUser]
 
     def get_queryset(self):
-        user = self.request.user
-        qs = Document.objects.select_related('projet', 'uploaded_by')
-
-        if user.role == 'direction':
-            return qs
-        if user.role == 'chef_projet':
-            return qs.filter(projet__chef_projet=user)
-        if user.role == 'consultant':
-            projets_ids = Tache.objects.filter(consultant=user).values_list('projet_id', flat=True).distinct()
-            return qs.filter(projet_id__in=projets_ids).filter(
-                models.Q(type='livrable') | models.Q(uploaded_by=user)
-            )
-        if user.role == 'partenaire':
-            return qs.filter(projet__partenaires=user).filter(
-                models.Q(type='livrable') | models.Q(uploaded_by=user)
-            )
-        if user.role == 'client':
-            return qs.filter(projet__client=user).filter(
-                models.Q(type='livrable') | models.Q(uploaded_by=user)
-            )
-        return qs.none()
+        return documents_accessibles_a(self.request.user)
 
     def perform_create(self, serializer):
         user = self.request.user
         projet = serializer.validated_data.get('projet')
 
-        if user.role == 'chef_projet' and not projet.chef_projet.filter(id=user.id).exists():
+        if is_direction(user):
+            pass
+        elif user.role == 'chef_projet' and not projet.chef_projet.filter(id=user.id).exists():
             raise PermissionDenied("Vous ne pouvez téléverser que sur vos propres projets.")
-        if user.role == 'consultant' and not Tache.objects.filter(consultant=user, projet=projet).exists():
+        elif user.role == 'consultant' and not Tache.objects.filter(consultant=user, projet=projet).exists():
             raise PermissionDenied("Vous n'êtes assigné à aucune tâche sur ce projet.")
-        if user.role == 'partenaire' and not projet.partenaires.filter(id=user.id).exists():
+        elif user.role == 'partenaire' and not projet.partenaires.filter(id=user.id).exists():
             raise PermissionDenied("Vous n'êtes pas partenaire sur ce projet.")
-        if user.role == 'client' and projet.client_id != user.id:
+        elif user.role == 'client' and projet.client_id != user.id:
             raise PermissionDenied("Ce projet n'est pas le vôtre.")
+        elif user.role not in {'chef_projet', 'consultant', 'partenaire', 'client'}:
+            raise PermissionDenied("Votre rôle ne peut pas téléverser de documents.")
 
         document = serializer.save(uploaded_by=user)
 
@@ -385,50 +434,60 @@ class DocumentViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         user = request.user
         is_chef_owner = user.role == 'chef_projet' and instance.projet.chef_projet.filter(id=user.id).exists()
-        if user.role != 'direction' and not is_chef_owner:
+        if not is_direction(user) and not is_chef_owner:
             return Response(
                 {"detail": "Vous n'avez pas la permission de supprimer ce document."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().destroy(request, *args, **kwargs)
 
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        user = self.request.user
+        requested_project = serializer.validated_data.get('projet', instance.projet)
+        is_chef_owner = user.role == 'chef_projet' and instance.projet.chef_projet.filter(id=user.id).exists()
 
-class CommentaireViewSet(BaseTenantViewSet):
+        if not is_direction(user) and not is_chef_owner:
+            raise PermissionDenied("Vous n'avez pas la permission de modifier ce document.")
+        if requested_project.id != instance.projet_id and not is_direction(user):
+            raise PermissionDenied("Seule la direction peut déplacer un document entre projets.")
+        serializer.save()
+
+
+class DocumentDownloadView(APIView):
+    permission_classes = [IsEligibleUser]
+
+    def get(self, request, pk):
+        document = get_object_or_404(documents_accessibles_a(request.user), pk=pk)
+        if not document.fichier:
+            return Response({'detail': 'Fichier indisponible.'}, status=status.HTTP_404_NOT_FOUND)
+        return FileResponse(
+            document.fichier.open('rb'),
+            as_attachment=True,
+            filename=document.nom,
+        )
+
+
+class CommentaireViewSet(BaseProtectedViewSet):
     queryset = Commentaire.objects.all()
     serializer_class = CommentaireSerializer
 
 
-class NotificationViewSet(BaseTenantViewSet):
+class NotificationViewSet(BaseProtectedViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEligibleUser]
     
     def get_queryset(self):
         user = self.request.user
-        tenant = getattr(self.request, 'tenant', None)
         role = getattr(user, 'role', None)
-
-        if tenant:
-           base_qs = Notification.objects.filter(tenant=tenant, utilisateur=user)
-        else:
-           base_qs = Notification.objects.filter(utilisateur=user)
+        base_qs = Notification.objects.filter(utilisateur=user)
 
 
-        if role == 'direction':
+        if is_direction(user):
             return base_qs.order_by('-date_envoi')
 
-        elif role == 'chef_projet':
-            projets_ids = Projet.objects.filter(chef_projet=user).values_list('id', flat=True)
-            qs = Notification.objects.filter(
-              models.Q(utilisateur=user) |
-              models.Q(projet__id__in=projets_ids)
-            )
-            if tenant:
-               qs = qs.filter(tenant=tenant)
-            return qs.distinct()
-
-        else:
-            return base_qs
+        return base_qs.order_by('-date_envoi')
 
     @action(detail=True, methods=['patch'], url_path='lire')
     def mark_as_read(self, request, pk=None):
@@ -444,30 +503,20 @@ class NotificationViewSet(BaseTenantViewSet):
         notifications.update(lue=True)
         return Response({'status': 'ok', 'count': count})
 
-class ConversationViewSet(BaseTenantViewSet):
-    queryset = Conversation.objects.all()
-    serializer_class = ConversationSerializer
-
-
-class MessageViewSet(BaseTenantViewSet):
-    queryset = Message.objects.all()
-    serializer_class = MessageSerializer
-
-
-class KpiViewSet(BaseTenantViewSet):
+class KpiViewSet(BaseProtectedViewSet):
     queryset = Kpi.objects.all()
     serializer_class = KpiSerializer
 
 
-class BudgetViewSet(BaseTenantViewSet):
+class BudgetViewSet(BaseProtectedViewSet):
     queryset = Budget.objects.all()
     serializer_class = BudgetSerializer
 
-class DirectionViewSet(BaseTenantViewSet):
+class DirectionViewSet(BaseProtectedViewSet):
     queryset = Direction.objects.all()
     serializer_class = DirectionSerializer  # À créer
 
-class ChefProjetViewSet(BaseTenantViewSet):
+class ChefProjetViewSet(BaseProtectedViewSet):
     queryset = ChefProjet.objects.all()
     serializer_class = ChefProjetSerializer  # À créer
     
@@ -489,10 +538,8 @@ class ConsultantListAPIView(generics.ListAPIView):
     
     def get_queryset(self):
         
-        tenant = getattr(self.request, 'tenant', None)
         return Utilisateur.objects.filter(
             role='consultant',
-            memberships__tenant=tenant,
             is_active=True
         ).order_by('nom')
 
@@ -503,14 +550,12 @@ class ConsultantDetailAPIView(generics.RetrieveAPIView):
     lookup_field = 'pk'
     
     def get_queryset(self):
-        tenant = getattr(self.request, 'tenant', None)
         return Utilisateur.objects.filter(
             role='consultant',
-            memberships__tenant=tenant,
             is_active=True
         )
 
-class ClientViewSet(BaseTenantViewSet):
+class ClientViewSet(BaseProtectedViewSet):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer  # À créer
     def get_queryset(self):
@@ -522,7 +567,7 @@ class ClientViewSet(BaseTenantViewSet):
             is_active=True
         ).order_by('nom')
 
-class PartenaireViewSet(BaseTenantViewSet):
+class PartenaireViewSet(BaseProtectedViewSet):
     queryset = Partenaire.objects.all()
     serializer_class = PartenaireSerializer  # À créer
     def get_queryset(self):
@@ -534,90 +579,6 @@ class PartenaireViewSet(BaseTenantViewSet):
             is_active=True
         ).order_by('nom')
 
-class ProjetListCreateView(generics.ListCreateAPIView):
-    serializer_class = ProjetSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-      tenant = getattr(self.request, 'tenant', None)
-      if tenant:
-           return Projet.objects.filter(tenant=tenant)
-      return Projet.objects.all()
-    
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
-
-
-# ========== INSCRIPTION ==========
-
-class RegisterView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []  
-    
-    def post(self, request):
-        print("Données reçues:", request.data)  # ← AJOUTEZ CE LOG
-        email = request.data.get('email')
-        nom = request.data.get('nom')
-        password = request.data.get('password')
-        role = request.data.get('role', 'consultant')
-        telephone = request.data.get('telephone', '')
-        entreprise = request.data.get('entreprise', '')
-        poste = request.data.get('poste', '')
-        
-        # Vérifier si l'utilisateur existe déjà
-        if Utilisateur.objects.filter(email=email).exists():
-            return Response(
-                {'error': 'Un compte existe déjà avec cet email'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Créer l'utilisateur
-        user = Utilisateur.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-            nom=nom,
-            telephone=telephone
-        )
-        
-        # Ajouter les champs supplémentaires
-        if entreprise:
-            user.entreprise = entreprise
-        if poste:
-            user.poste = poste
-        user.save()
-        
-        # Assigner au tenant par défaut
-        tenant = Tenant.objects.first()
-        if tenant:
-            role_map = {
-                'direction': RoleChoices.DIRECTION,
-                'chef_projet': RoleChoices.CHEF_PROJET,
-                'consultant': RoleChoices.CONSULTANT,
-                'client': RoleChoices.CLIENT,
-                'partenaire': RoleChoices.PARTENAIRE,
-            }
-            role_choice = role_map.get(role, RoleChoices.CONSULTANT)
-            
-            TenantMembership.objects.create(
-                user=user,
-                tenant=tenant,
-                role=role_choice
-            )
-        
-        return Response({
-            'message': 'Utilisateur créé avec succès',
-            'user': {
-                'id': str(user.id),
-                'email': user.email,
-                'nom': user.nom,
-                'role': role
-            }
-        }, status=status.HTTP_201_CREATED)
-
-
 class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
     
@@ -625,10 +586,7 @@ class LoginView(TokenObtainPairView):
 # ========== MOT DE PASSE OUBLIÉ ==========
 
 class ForgotPasswordView(APIView):
-    """
-    Réinitialisation du mot de passe :
-    envoie le mot de passe temporaire par WhatsApp ET par email en parallèle.
-    """
+    """Envoie un lien de réinitialisation à usage unique, valable 30 minutes."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -641,173 +599,33 @@ class ForgotPasswordView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Sécurité : même réponse si l'utilisateur n'existe pas
-        try:
-            user = Utilisateur.objects.get(email=email)
-        except Utilisateur.DoesNotExist:
-            return Response(
-                {'message': 'Si un compte correspond, un nouveau mot de passe vous sera envoyé.'},
-                status=status.HTTP_200_OK,
-            )
-
-        if user.telephone != telephone:
-            return Response(
-                {'message': 'Si un compte correspond, un nouveau mot de passe vous sera envoyé.'},
-                status=status.HTTP_200_OK,
-            )
-
-        if user.statut_approbation != 'approved':
-            return Response(
-                {'error': 'Votre compte n\'a pas encore été approuvé. Veuillez contacter l\'administrateur.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not user.is_active:
-            return Response(
-                {'error': 'Votre compte est désactivé. Veuillez contacter l\'administrateur.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Générer le mot de passe temporaire
-        temp_password = secrets.token_urlsafe(10)
-        user.set_password(temp_password)
-        user.doit_changer_mot_de_passe = True
-        user.save()
-        PasswordResetToken.objects.filter(user=user, used=False).delete()
-
-        # ── Résultats partagés entre les threads ──────────────────────
-        results = {'whatsapp': False, 'email': False}
-
-        # ── Thread WhatsApp ───────────────────────────────────────────
-        def send_whatsapp():
-            if not getattr(settings, 'WHATSAPP_ENABLED', True) or not user.telephone:
-                logger.warning('WhatsApp désactivé ou téléphone manquant.')
-                return
-            try:
-                whatsapp = WhatsAppService()
-                if whatsapp.send_temp_password(user, temp_password):
-                    logger.info(f"[RESET] WhatsApp envoyé → {user.telephone}")
-                    results['whatsapp'] = True
-                else:
-                    logger.error(f"[RESET] Échec WhatsApp → {user.telephone}")
-            except Exception as e:
-                logger.error(f"[RESET] Erreur WhatsApp : {e}")
-
-        # ── Thread Email ──────────────────────────────────────────────
-        def send_email():
-            if not user.email:
-                logger.warning('[RESET] Pas d\'email pour cet utilisateur.')
-                return
-            try:
-                from django.core.mail import send_mail
-
-                sujet = "🔐 RAMAQS — Votre mot de passe temporaire"
-                corps_html = f"""
-<!DOCTYPE html>
-<html>
-<body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-  <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 12px;
-              padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-
-    <div style="text-align: center; margin-bottom: 24px;">
-      <div style="background: #dc2626; color: white; font-size: 24px; font-weight: bold;
-                  width: 48px; height: 48px; border-radius: 12px;
-                  display: inline-flex; align-items: center; justify-content: center; line-height: 48px;">
-        R
-      </div>
-      <h2 style="color: #111; margin-top: 16px;">RAMAQS Consulting</h2>
-    </div>
-
-    <p style="color: #374151;">Bonjour <strong>{user.nom}</strong>,</p>
-    <p style="color: #374151;">
-      Vous avez demandé la réinitialisation de votre mot de passe.
-      Voici votre mot de passe temporaire :
-    </p>
-
-    <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
-                padding: 16px; text-align: center; margin: 24px 0;">
-      <p style="color: #6b7280; font-size: 12px; margin: 0 0 8px 0;">MOT DE PASSE TEMPORAIRE</p>
-      <p style="font-size: 22px; font-weight: bold; color: #dc2626;
-                letter-spacing: 3px; margin: 0; font-family: monospace;">
-        {temp_password}
-      </p>
-    </div>
-
-    <p style="color: #374151;">
-      Connectez-vous avec ce mot de passe, puis changez-le immédiatement depuis votre profil.
-    </p>
-
-    <div style="text-align: center; margin: 24px 0;">
-      <a href="{settings.FRONTEND_URL}/login"
-         style="background: #dc2626; color: white; padding: 12px 32px;
-                border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
-        Se connecter
-      </a>
-    </div>
-
-    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-      Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.<br>
-      © RAMAQS Consulting — {settings.COMPANY_NAME}
-    </p>
-  </div>
-</body>
-</html>"""
-
-                corps_texte = (
-                    f"Bonjour {user.nom},\n\n"
-                    f"Votre mot de passe temporaire RAMAQS : {temp_password}\n\n"
-                    f"Connectez-vous sur : {settings.FRONTEND_URL}/login\n"
-                    f"puis changez votre mot de passe immédiatement.\n\n"
-                    f"Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.\n"
-                    f"© RAMAQS Consulting — {settings.COMPANY_NAME}"
-                )
-
-                sent = send_mail(
-                    subject=sujet,
-                    message=corps_texte,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[user.email],
-                    html_message=corps_html,
-                    fail_silently=False,
-                )
-                if sent:
-                    logger.info(f"[RESET] Email envoyé → {user.email}")
-                    results['email'] = True
-                else:
-                    logger.error(f"[RESET] Échec email → {user.email}")
-            except Exception as e:
-                logger.error(f"[RESET] Erreur email : {e}")
-
-        # ── Lancer les deux en parallèle et attendre ──────────────────
-        t_ws    = threading.Thread(target=send_whatsapp, daemon=True)
-        t_email = threading.Thread(target=send_email,    daemon=True)
-        t_ws.start()
-        t_email.start()
-        t_ws.join(timeout=15)    # max 15 s pour WhatsApp
-        t_email.join(timeout=15) # max 15 s pour l'email
-
-        # ── Réponse finale ────────────────────────────────────────────
-        channels = []
-        if results['whatsapp']:
-            channels.append('WhatsApp')
-        if results['email']:
-            channels.append('email')
-
-        if channels:
-            return Response(
-                {
-                    'message': f"Un mot de passe temporaire vous a été envoyé par {' et '.join(channels)}.",
-                    'success': True,
-                    'channels': channels,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        return Response(
-            {'error': 'Impossible d\'envoyer le mot de passe. Veuillez contacter l\'administrateur.'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        generic_response = Response(
+            {'message': 'Si un compte correspond, un lien de réinitialisation vous sera envoyé.'},
+            status=status.HTTP_200_OK,
         )
+        try:
+            user = Utilisateur.objects.get(email=email, telephone=telephone, is_active=True, statut_approbation='approved')
+        except Utilisateur.DoesNotExist:
+            return generic_response
+
+        PasswordResetToken.objects.filter(user=user, used=False).delete()
+        reset_token = PasswordResetToken.objects.create(
+            user=user,
+            token=secrets.token_urlsafe(32),
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token.token}"
+        try:
+            send_mail(
+                subject='RAMAQS — Réinitialisation du mot de passe',
+                message=f"Utilisez ce lien valable 30 minutes : {reset_url}",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception:
+            logger.exception("Échec de l'envoi du lien de réinitialisation")
+        return generic_response
 
 class ValidateResetTokenView(APIView):
     permission_classes = [AllowAny]
@@ -835,9 +653,7 @@ class ValidateResetTokenView(APIView):
 
 
 class ResetPasswordView(APIView):
-    """
-    Réinitialiser le mot de passe avec un token (après réception du mot de passe temporaire)
-    """
+    """Réinitialise le mot de passe à partir d'un lien à usage unique."""
     permission_classes = [AllowAny]
     
     def post(self, request):
@@ -859,10 +675,10 @@ class ResetPasswordView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         
-        if len(new_password) < 6:
-            return Response({
-                'error': 'Le mot de passe doit contenir au moins 6 caractères'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new_password)
+        except ValidationError as exc:
+            return Response({'error': list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
         
         
         try:
@@ -935,21 +751,19 @@ class ChefProjetConsultantsView(APIView):
     
     def get(self, request, projet_id):
         user = request.user
-        tenant = request.tenant
-        
         # Vérifier que l'utilisateur est chef de projet sur ce projet
         try:
-            projet = Projet.objects.get(id=projet_id, tenant=tenant)
+            projet = Projet.objects.get(id=projet_id)
         except Projet.DoesNotExist:
             return Response({'error': 'Projet non trouvé'}, status=404)
         
         # Vérifier les droits (chef projet ou direction)
-        role = user.get_role_in_tenant(tenant)
-        if role not in ['direction', 'chef_projet']:
+        role = user.role
+        if not is_direction(user) and role != 'chef_projet':
             return Response({'error': 'Non autorisé'}, status=403)
         
         # Si chef projet, vérifier qu'il est bien le chef de ce projet
-        if role == 'chef_projet' and projet.chef_projet != user:
+        if role == 'chef_projet' and not projet.chef_projet.filter(id=user.id).exists():
             return Response({'error': 'Vous n\'êtes pas le chef de ce projet'}, status=403)
         
         # Récupérer tous les consultants du projet (via les tâches)
@@ -987,11 +801,10 @@ class ChefProjetConsultantsView(APIView):
             'projet': {
                 'id': str(projet.id),
                 'nom': projet.nom,
-                'chef_projet': {
-                    'id': str(projet.chef_projet.id),
-                    'nom': projet.chef_projet.nom,
-                    'email': projet.chef_projet.email
-                }
+                'chefs_projet': [
+                    {'id': str(chef.id), 'nom': chef.nom, 'email': chef.email}
+                    for chef in projet.chef_projet.all()
+                ]
             },
             'consultants': data,
             'total_consultants': len(data)
@@ -1013,8 +826,7 @@ class CurrentUserView(APIView):
             except:
                 photo_url = None
         
-        # Récupérer le rôle dans le tenant
-        role = user.get_role_in_tenant(request.tenant) if hasattr(user, 'get_role_in_tenant') else user.role
+        role = user.role
         
         return Response({
             'id': str(user.id),
@@ -1060,6 +872,10 @@ class UtilisateurDetailView(generics.RetrieveUpdateAPIView):
         
         # Gérer spécialement l'upload de photo
         if 'photo_profil' in request.FILES:
+            try:
+                validate_profile_photo(request.FILES['photo_profil'])
+            except ValidationError as exc:
+                return Response({'photo_profil': exc.messages}, status=status.HTTP_400_BAD_REQUEST)
             user.photo_profil = request.FILES['photo_profil']
         
         # Mettre à jour les autres champs
@@ -1077,7 +893,7 @@ class UtilisateurDetailView(generics.RetrieveUpdateAPIView):
             'poste': user.poste,
             'entreprise': user.entreprise,
             'photo_profil': user.photo_profil.url if user.photo_profil else None,
-            'role': user.get_role_in_tenant(request.tenant) if hasattr(user, 'get_role_in_tenant') else user.role,
+            'role': user.role,
         })
     
 
@@ -1098,6 +914,10 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
         
         # Gérer l'upload de photo
         if 'photo_profil' in request.FILES:
+            try:
+                validate_profile_photo(request.FILES['photo_profil'])
+            except ValidationError as exc:
+                return Response({'photo_profil': exc.messages}, status=status.HTTP_400_BAD_REQUEST)
             user.photo_profil = request.FILES['photo_profil']
         
         # Mettre à jour les champs texte
@@ -1124,72 +944,10 @@ class UtilisateurViewSet(viewsets.ModelViewSet):
             'poste': user.poste,
             'entreprise': user.entreprise,
             'photo_profil': photo_url,
-            'role': user.get_role_in_tenant(request.tenant) if hasattr(user, 'get_role_in_tenant') else getattr(user, 'role', 'consultant'),
+            'role': user.role,
             'dateEntree': user.date_creation,
         })
     
-
-
-
-class TacheListCreateView(generics.ListCreateAPIView):
-    queryset = Tache.objects.all()
-    
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        
-        data = []
-        for task in queryset:
-            data.append({
-                'id': str(task.id),
-                'title': task.titre,
-                'description': task.description,
-                'priority': task.priorite,
-                'status': self.map_status(task.statut),
-                'avancement': float(task.avancement),
-                'dateEcheance': task.date_fin_prevue,
-                'projetId': str(task.projet.id) if task.projet else None,
-                'assigneA': str(task.consultant.id) if task.consultant else None,
-                'assigneNom': task.consultant.nom if task.consultant else None,
-            })
-        
-        return Response({
-            'count': len(data),
-            'results': data
-        })
-    
-    def map_status(self, statut):
-        mapping = {
-            'en cours': 'en_cours',
-            'termine': 'termine',
-            'a_faire': 'a_faire'
-        }
-        return mapping.get(statut, 'a_faire')
-    
-class TacheDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = TacheSerializer
-    
-    def get_queryset(self):
-        tenant = self.request.tenant
-        return Tache.objects.filter(tenant=tenant)
-    
-    def retrieve(self, request, *args, **kwargs):
-        task = self.get_object()
-        
-        data = {
-            'id': str(task.id),
-            'title': task.titre,
-            'description': task.description,
-            'priority': task.priorite,
-            'status': 'en_cours' if task.statut == 'en cours' else task.statut,
-            'avancement': float(task.avancement),
-            'dateEcheance': task.date_fin_prevue,
-            'projetId': str(task.projet.id) if task.projet else None,
-            'assigneA': str(task.consultant.id) if task.consultant else None,
-            'assigneNom': task.consultant.nom if task.consultant else None,
-        }
-        
-        return Response(data)
 
 
 
@@ -1207,13 +965,7 @@ class ChangerMotDePasseView(APIView):
         nouveau_mot_de_passe = request.data.get('nouveau_mot_de_passe')
         confirmation = request.data.get('confirmation')
         
-        print("=" * 50)
-        print("🔐 [ChangerMotDePasseView] Appelée")
-        print(f"👤 Utilisateur: {user.email}")
-        print(f"📝 Ancien: {ancien_mot_de_passe}")
-        print(f"📝 Nouveau: {nouveau_mot_de_passe}")
-        print(f"📝 Confirmation: {confirmation}")
-        print("=" * 50)
+        
         
         # Vérifier que tous les champs sont présents
         if not ancien_mot_de_passe or not nouveau_mot_de_passe or not confirmation:
@@ -1224,7 +976,6 @@ class ChangerMotDePasseView(APIView):
         
         # Vérifier l'ancien mot de passe
         if not user.check_password(ancien_mot_de_passe):
-            print(f" Ancien mot de passe incorrect")
             return Response(
                 {'error': 'Ancien mot de passe incorrect'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -1238,11 +989,10 @@ class ChangerMotDePasseView(APIView):
             )
         
         # Vérifier la longueur
-        if len(nouveau_mot_de_passe) < 6:
-            return Response(
-                {'error': 'Le mot de passe doit contenir au moins 6 caractères'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        try:
+            validate_password(nouveau_mot_de_passe, user)
+        except ValidationError as exc:
+            return Response({'error': list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
         
         # Vérifier que le nouveau mot de passe est différent
         if ancien_mot_de_passe == nouveau_mot_de_passe:
@@ -1256,7 +1006,6 @@ class ChangerMotDePasseView(APIView):
         user.doit_changer_mot_de_passe = False
         user.save()
         
-        print(f"Mot de passe changé pour {user.email}")
         
         return Response(
             {'message': 'Mot de passe changé avec succès'},
@@ -1278,10 +1027,8 @@ class ChefProjetListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        tenant = self.request.tenant
         return Utilisateur.objects.filter(
             role='chef_projet',
-            memberships__tenant=tenant,
             is_active=True,
             statut_approbation='approved'
         ).order_by('nom')
@@ -1295,10 +1042,8 @@ class ChefProjetDetailView(generics.RetrieveAPIView):
     lookup_field = 'pk'
     
     def get_queryset(self):
-        tenant = self.request.tenant
         return Utilisateur.objects.filter(
             role='chef_projet',
-            memberships__tenant=tenant,
             is_active=True,
             statut_approbation='approved'
         )
@@ -1325,51 +1070,27 @@ def parse_date_excel(value):
             continue
     return None
 
-import secrets
-
-def resoudre_ou_creer_utilisateur(valeur, role):
+def resoudre_utilisateur_existant(valeur, role):
     valeur = str(valeur).strip()
     if not valeur:
         return None, None
 
     if '@' in valeur:
         utilisateur = Utilisateur.objects.filter(
-            email__iexact=valeur, role=role
+            email__iexact=valeur, role=role, is_active=True, statut_approbation='approved'
         ).first()
     else:
         utilisateur = Utilisateur.objects.filter(
-            nom__iexact=valeur, role=role
+            nom__iexact=valeur, role=role, is_active=True, statut_approbation='approved'
         ).first()
 
     if utilisateur:
         return utilisateur, None
 
-    # Pas trouvé → création automatique
-    if '@' in valeur:
-        email = valeur.lower()
-        nom = valeur.split('@')[0].replace('.', ' ').title()
-    else:
-        nom = valeur
-        slug = valeur.lower().replace(' ', '.').replace("'", '')
-        email = f"{slug}@ramaqs-import.com"
-
-    # Email déjà pris par un autre rôle
-    existant = Utilisateur.objects.filter(email__iexact=email).first()
-    if existant:
-        return existant, f"'{valeur}' existe déjà avec le rôle '{existant.role}' — utilisé tel quel"
-
-    mot_de_passe_temp = secrets.token_urlsafe(12)
-    utilisateur = Utilisateur.objects.create_user(
-        username=email,
-        email=email,
-        nom=nom,
-        role=role,
-        password=mot_de_passe_temp,
-        is_active=True,
-        statut_approbation='approved',
+    return None, (
+        f"Utilisateur '{valeur}' introuvable pour le rôle '{role}'. "
+        "Créez et approuvez ce compte avant d'importer le projet."
     )
-    info = f"Compte créé automatiquement : {nom} ({email}) — rôle {role}"
-    return utilisateur, info
  
 class ImportProjetsExcelView(APIView):
     parser_classes = [MultiPartParser]
@@ -1379,7 +1100,7 @@ class ImportProjetsExcelView(APIView):
         user = request.user
  
         # Seule la direction peut importer
-        if user.role != 'direction':
+        if not is_direction(user):
             return Response(
                 {'error': 'Accès refusé'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1391,9 +1112,15 @@ class ImportProjetsExcelView(APIView):
                 {'error': 'Aucun fichier fourni'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        if fichier.size > 5 * 1024 * 1024 or not fichier.name.lower().endswith('.xlsx'):
+            return Response(
+                {'error': 'Le fichier doit être un .xlsx de 5 Mo maximum'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
  
         try:
-            wb = openpyxl.load_workbook(fichier, data_only=True)
+            wb = openpyxl.load_workbook(fichier, data_only=True, read_only=True)
             ws = wb.active
         except Exception:
             return Response(
@@ -1406,9 +1133,10 @@ class ImportProjetsExcelView(APIView):
  
         projets_crees = []
         erreurs = []
-        tenant = Tenant.objects.first()
- 
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if row_idx > 1001:
+                erreurs.append('Import limité à 1 000 lignes.')
+                break
             if not any(row):
                 continue  # ligne vide
  
@@ -1436,7 +1164,7 @@ class ImportProjetsExcelView(APIView):
             if not client_valeur:
                 row_errors.append(f"Ligne {row_idx} : client manquant (obligatoire)")
             else:
-                client, err = resoudre_ou_creer_utilisateur(client_valeur, 'client')
+                client, err = resoudre_utilisateur_existant(client_valeur, 'client')
                 if err:
                     row_errors.append(f"Ligne {row_idx} : {err}")
  
@@ -1450,21 +1178,25 @@ class ImportProjetsExcelView(APIView):
             chef_valeur = row_data.get('chef_projet') or row_data.get('chef')
             if chef_valeur:
                 for valeur in str(chef_valeur).split(','):
-                    chef, err = resoudre_ou_creer_utilisateur(valeur, 'chef_projet')
+                    chef, err = resoudre_utilisateur_existant(valeur, 'chef_projet')
                     if chef:
                         chefs.append(chef)
                     elif err:
-                        erreurs.append(f"Ligne {row_idx} : {err}")
+                        row_errors.append(f"Ligne {row_idx} : {err}")
  
             partenaires = []
             partenaires_valeur = row_data.get('partenaires') or row_data.get('partenaire')
             if partenaires_valeur:
                 for valeur in str(partenaires_valeur).split(','):
-                    partenaire, err = resoudre_ou_creer_utilisateur(valeur, 'partenaire')
+                    partenaire, err = resoudre_utilisateur_existant(valeur, 'partenaire')
                     if partenaire:
                         partenaires.append(partenaire)
                     elif err:
-                        erreurs.append(f"Ligne {row_idx} : {err}")
+                        row_errors.append(f"Ligne {row_idx} : {err}")
+
+            if row_errors:
+                erreurs.extend(row_errors)
+                continue
  
             budget_raw = row_data.get('budget') or 0
             try:
@@ -1487,7 +1219,6 @@ class ImportProjetsExcelView(APIView):
                     date_debut=date_debut,
                     date_fin_prevue=date_fin_prevue,
                     client=client,
-                    tenant=tenant,
                 )
  
                 if chefs:

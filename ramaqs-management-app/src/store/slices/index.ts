@@ -10,7 +10,5 @@ export { default as sourcesReducer } from './ressourcesSlice';
 export { default as documentsReducer } from './documentsSlice';
 export { default as commentairesReducer } from './commentairesSlice';
 export { default as notificationsReducer } from './notificationsSlice';
-export { default as conversationsReducer } from './conversationsSlice';
-export { default as messagesReducer } from './messagesSlice';
 export { default as budgetsReducer } from './budgetsSlice';
 export { default as kpisReducer } from './kpisSlice';

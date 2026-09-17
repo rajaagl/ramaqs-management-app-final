@@ -156,7 +156,7 @@ function Landing() {
           <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { icon: BarChart3, title: "Pilotage temps réel", desc: "Tableaux de bord dynamiques, KPI coût/délai/qualité, exports PDF & Excel." },
-              { icon: Users, title: "Collaboration fluide", desc: "Messagerie, commentaires, partage de documents et historique complet." },
+              { icon: Users, title: "Collaboration fluide", desc: "Commentaires, partage de documents et historique complet." },
               { icon: Shield, title: "Gestion des risques", desc: "Identification, scoring impact/probabilité, plans d'action et suivi." },
               { icon: Sparkles, title: "IA décisionnelle", desc: "Prédiction des retards, allocation intelligente, assistant projet." },
               { icon: Zap, title: "Automatisations", desc: "Notifications, workflows, validations, relances automatiques." },
@@ -189,7 +189,6 @@ function Landing() {
                 "Prédiction des retards avec score de probabilité",
                 "Recommandation automatique d'allocation des ressources",
                 "Détection précoce des risques techniques et budgétaires",
-                "Assistant conversationnel par projet (chat IA)",
               ].map((i) => (
                 <li key={i} className="flex items-start gap-2"><CheckCircle2 className="h-4 w-4 text-red-600 mt-0.5" /> {i}</li>
               ))}

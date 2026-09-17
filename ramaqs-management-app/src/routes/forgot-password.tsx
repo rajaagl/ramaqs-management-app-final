@@ -2,7 +2,8 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Mail, Phone, CheckCircle, AlertCircle, Loader2, Send, Info } from "lucide-react";
+import { Mail, Phone, CheckCircle, AlertCircle, Loader2, Send } from "lucide-react";
+import { API_BASE_URL } from "../config/endpoints";
 
 export const Route = createFileRoute("/forgot-password")({
   component: ForgotPasswordPage,
@@ -12,13 +13,11 @@ function ForgotPasswordPage() {
   const [formData, setFormData] = useState({ email: "", telephone: "" });
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
-  const [infoMessage, setInfoMessage] = useState(""); 
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setInfoMessage("");
 
     // ── Validation frontend ───────────────────────────────────────────────────
     if (!formData.email || !formData.telephone) {
@@ -37,7 +36,7 @@ function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/auth/forgot-password/", {
+      const response = await fetch(`${API_BASE_URL}/auth/forgot-password/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -54,25 +53,9 @@ function ForgotPasswordPage() {
         return;
       }
 
-      // ── ✅ FIX PRINCIPAL ──────────────────────────────────────────────────
-      // Le backend renvoie TOUJOURS un 200, même quand l'email ou le téléphone
-      // ne correspondent à aucun compte (mesure de sécurité anti-énumération).
-      // La seule façon de savoir si le WhatsApp a vraiment été envoyé, c'est
-      // de vérifier `data.success === true`, présent UNIQUEMENT en cas de succès réel.
-      //
-      // Avant le fix : setSubmitted(true) s'exécutait sur tout 200
-      //   → écran de succès même quand rien n'était envoyé.
-      // Après le fix : seul data.success === true déclenche l'écran de succès.
-      if (data.success === true) {
-        setSubmitted(true); // ← uniquement si WhatsApp vraiment envoyé
-      } else {
-        // 200 sans success:true = email/téléphone non reconnus dans la base
-        // On affiche un message neutre (on ne révèle pas si l'email existe)
-        setInfoMessage(
-          data.message ||
-          "Si ces informations correspondent à un compte, vous recevrez un message WhatsApp."
-        );
-      }
+      // Le backend renvoie volontairement la même réponse dans tous les cas
+      // afin de ne pas révéler quels comptes existent.
+      setSubmitted(true);
     } catch {
       setError("Impossible de contacter le serveur. Vérifiez votre connexion.");
     } finally {
@@ -88,14 +71,14 @@ function ForgotPasswordPage() {
           <div className="h-16 w-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Mot de passe envoyé !</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Demande envoyée</h2>
           <p className="text-gray-600 mb-4">
-            Un nouveau mot de passe temporaire a été envoyé par WhatsApp au{" "}
-            <strong className="text-red-600">{formData.telephone}</strong>
+            Si les informations correspondent à un compte actif, un lien de réinitialisation valable 30 minutes a été envoyé à{" "}
+            <strong className="text-red-600">{formData.email}</strong>.
           </p>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
             <p className="text-sm text-amber-700">
-              <strong>⚠️ Important :</strong> Ce mot de passe est temporaire. Vous devrez le modifier dès votre première connexion.
+              <strong>⚠️ Important :</strong> Ne partagez jamais le lien reçu. Si vous n'avez rien demandé, ignorez cet e-mail.
             </p>
           </div>
           <Link
@@ -119,7 +102,7 @@ function ForgotPasswordPage() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Mot de passe oublié</h2>
           <p className="text-gray-500 mt-2 text-sm">
-            Entrez votre email et numéro de téléphone pour recevoir un nouveau mot de passe par WhatsApp
+            Entrez votre email et numéro de téléphone pour recevoir un lien de réinitialisation par e-mail
           </p>
         </div>
 
@@ -173,17 +156,9 @@ function ForgotPasswordPage() {
             </div>
           )}
 
-          {/* ✅ Message neutre (email/tel inconnus — 200 sans success:true) */}
-          {infoMessage && (
-            <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-start gap-2 animate-in fade-in">
-              <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>{infoMessage}</span>
-            </div>
-          )}
-
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
             <p className="text-xs text-amber-700">
-               Un mot de passe temporaire vous sera envoyé par WhatsApp si vos informations correspondent à un compte.
+               Si les informations correspondent à un compte, un lien de réinitialisation sera envoyé par e-mail.
             </p>
           </div>
 
@@ -195,7 +170,7 @@ function ForgotPasswordPage() {
             {isLoading ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Envoi en cours...</>
             ) : (
-              <><Send className="h-4 w-4" /> Recevoir le mot de passe</>
+              <><Send className="h-4 w-4" /> Recevoir le lien</>
             )}
           </button>
         </form>

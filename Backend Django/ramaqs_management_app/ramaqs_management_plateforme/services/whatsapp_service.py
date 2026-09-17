@@ -65,91 +65,6 @@ class WhatsAppService:
             logger.error(f"Exception: {e}")
             return False
     
-    def send_approval_notification(self, user, temp_password, role_label):
-        """
-        Envoyer notification d'approbation personnalisée
-        """
-        if not user.telephone:
-            logger.warning(f"⚠️ {user.email} n'a pas de numéro de téléphone")
-            return False
-        
-        # Date et heure actuelles
-        current_date = datetime.now().strftime("%d/%m/%Y à %H:%M")
-        
-        # Messages différents selon le rôle
-        role_messages = {
-            'chef_projet': {
-                'emoji': '📊',
-                'title': 'Chef de Projet',
-                'icon': '👨‍💼',
-                'welcome': 'Vous pouvez maintenant créer et gérer vos projets.'
-            },
-            'consultant': {
-                'emoji': '💼',
-                'title': 'Consultant',
-                'icon': '👨‍💻',
-                'welcome': 'Vous pouvez maintenant accéder à vos missions.'
-            },
-            'partenaire': {
-                'emoji': '🤝',
-                'title': 'Partenaire',
-                'icon': '🏢',
-                'welcome': 'Vous pouvez maintenant collaborer sur nos projets.'
-            },
-            'client': {
-                'emoji': '👑',
-                'title': 'Client',
-                'icon': '🏆',
-                'welcome': 'Vous pouvez maintenant suivre vos projets.'
-            }
-        }
-        
-        role_info = role_messages.get(user.role, {
-            'emoji': '✅',
-            'title': role_label,
-            'icon': '👤',
-            'welcome': 'Bienvenue sur notre plateforme.'
-        })
-        
-        message = f"""╔══════════════════════════════════════════╗
-║  🎉 *RAMAQS CONSULTING* 🎉
-╚══════════════════════════════════════════╝
-
-{role_info['icon']} *COMPTE APPROUVÉ !*
-
-Bonjour *{user.nom.upper()}*,
-
-{role_info['emoji']} Votre inscription en tant que 
-   *{role_info['title']}* a été validée.
-
-───────────────────────────────────────
- 🔐 *VOS IDENTIFIANTS DE CONNEXION*
-───────────────────────────────────────
-    Email : {user.email}
- 🔑 Mot de passe : *{temp_password}*
-────────────────────────────────────────
-
-⚠️ *IMPORTANT :*
-   • Changez votre mot de passe à la première connexion
-   • Ne partagez jamais vos identifiants
-   • En cas de perte, utilisez "Mot de passe oublié"
-
-✨ *Ce que vous pouvez faire :*
-{role_info['welcome']}
-
-
-*Date d'activation :* {current_date}
-
-════════════════════════════════════════
-  📞 *CONTACT*
-  • Email : {settings.COMPANY_EMAIL}
-  • Tél : {settings.COMPANY_PHONE}
-═══════════════════════════════════════
-
-*RAMAQS Consulting* - Votre succès est notre mission 
-"""
-        return self.send_message(user.telephone, message)
-    
     def send_rejection_notification(self, user, justification, role_label):
         """
         Envoyer notification de rejet personnalisée
@@ -230,7 +145,6 @@ utilisateurs !
 │ 📊 Tableau de bord personnalisé
 │ 📁 Gestion de vos projets
 │ ✅ Suivi de vos tâches
-│ 💬 Messagerie intégrée
 └────────────────────────────────────────┘
 
 🔗 *ACCÉDER À VOTRE ESPACE :*
@@ -286,31 +200,3 @@ Bonjour *{user.nom.upper()}*,
             logger.error(f"Erreur vérification WhatsApp: {e}")
             return False
         
-    def send_temp_password(self, user, temp_password):
-        """Envoyer un mot de passe temporaire par WhatsApp"""
-        if not user.telephone:
-            logger.warning(f"⚠️ {user.email} n'a pas de numéro de téléphone")
-            return False
-        
-        message = f""" *RAMAQS Consulting* - Réinitialisation du mot de passe
-
-Bonjour *{user.nom}*,
-
-Vous avez demandé la réinitialisation de votre mot de passe.
-
-🔐 *Vos nouvelles identifiants :*
-━━━━━━━━━━━━━━━━━━━━
-Email: {user.email}
-Nouveau mot de passe: *{temp_password}*
-━━━━━━━━━━━━━━━━━━━━
-
-⚠️ *Important:*
-   • Changez ce mot de passe après votre première connexion
-   • Ne le partagez avec personne
-
-
-
----
-*RAMAQS Consulting* - Votre partenaire de confiance
-"""
-        return self.send_message(user.telephone, message)

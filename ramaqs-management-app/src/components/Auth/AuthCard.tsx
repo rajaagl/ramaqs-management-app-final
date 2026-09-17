@@ -39,7 +39,7 @@ export function AuthCard({ children, title, subtitle, footer }: AuthCardProps) {
         {/* Entreprise */}
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <Building2 className="h-3 w-3" />
-          <span>Plateforme multi-tenant RAMAQS</span>
+          <span>Plateforme RAMAQS Consulting</span>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ Backend Django/**/.env.*
 Backend Django/**/*.env
 Backend Django/**/.env.local
 Backend Django/**/.env.production
+!Backend Django/**/.env.example
 
 Backend Django/**/__pycache__/
 Backend Django/**/*.py[cod]

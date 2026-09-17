@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { X, FileSpreadsheet, FileText, Loader2, Download, CheckCircle, ChevronRight } from "lucide-react";
-import * as XLSX from 'xlsx';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -13,7 +12,7 @@ interface ExportModalProps {
 }
 
 export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportModalProps) {
-  const [selectedFormat, setSelectedFormat] = useState<'excel' | 'pdf' | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'pdf' | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -31,9 +30,9 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
 };
   if (!isOpen) return null;
 
-  // Exporter en Excel
-  const exportToExcel = async () => {
-    setSelectedFormat('excel');
+  // CSV est compatible Excel et évite de charger un parseur XLSX vulnérable côté navigateur.
+  const exportToCsv = async () => {
+    setSelectedFormat('csv');
     setIsExporting(true);
     setIsSuccess(false);
     
@@ -64,21 +63,20 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
         ])
       ];
 
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      
-      ws['!cols'] = [
-        { wch: 35 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 }
-      ];
-
-      XLSX.utils.book_append_sheet(wb, ws, 'Dashboard');
-      
-      const fileName = `RAMAQS_Dashboard_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const safeCsvCell = (value: unknown) => {
+        const text = String(value ?? '');
+        // Empêche l'injection de formule lors de l'ouverture avec Excel.
+        const neutralized = /^[=+\-@]/.test(text) ? `'${text}` : text;
+        return `"${neutralized.replaceAll('"', '""')}"`;
+      };
+      const csv = `\uFEFF${data.map(row => row.map(safeCsvCell).join(';')).join('\r\n')}`;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `RAMAQS_Dashboard_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
       
       setIsSuccess(true);
       setTimeout(() => {
@@ -87,8 +85,8 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
       }, 1500);
       
     } catch (error) {
-      console.error('Erreur export Excel:', error);
-      alert('Erreur lors de l\'export Excel');
+      console.error('Erreur export CSV:', error);
+      alert('Erreur lors de l\'export CSV');
     } finally {
       setIsExporting(false);
     }
@@ -257,7 +255,7 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
               <Loader2 className="h-12 w-12 text-red-600 animate-spin mx-auto mb-4" />
               <h3 className="font-semibold text-gray-900">Export en cours...</h3>
               <p className="text-sm text-gray-500 mt-1">
-                {selectedFormat === 'excel' ? 'Generation du fichier Excel' : 'Generation du fichier PDF'}
+                {selectedFormat === 'csv' ? 'Generation du fichier CSV' : 'Generation du fichier PDF'}
               </p>
             </div>
           ) : (
@@ -267,15 +265,15 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
               </p>
               
               <button
-                onClick={exportToExcel}
+                onClick={exportToCsv}
                 className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 transition-all group"
               >
                 <div className="h-12 w-12 rounded-xl bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition">
                   <FileSpreadsheet className="h-6 w-6 text-green-600" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="font-semibold text-gray-900">Excel</p>
-                  <p className="text-xs text-gray-500">Fichier .xlsx pour analyse</p>
+                  <p className="font-semibold text-gray-900">Tableur CSV</p>
+                  <p className="text-xs text-gray-500">Compatible Excel et sans parseur XLSX</p>
                 </div>
                 <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-green-600 transition" />
               </button>

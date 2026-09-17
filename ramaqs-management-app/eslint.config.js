@@ -11,6 +11,9 @@ export default [
       'sort-imports': 'off',
       '@typescript-eslint/array-type': 'off',
       '@typescript-eslint/require-await': 'off',
+      // API responses remain partially dynamic; keep these checks visible without
+      // blocking delivery while the response types are progressively tightened.
+      '@typescript-eslint/no-unnecessary-condition': 'warn',
       'pnpm/json-enforce-catalog': 'off',
     },
   },

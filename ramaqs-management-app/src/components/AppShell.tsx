@@ -8,7 +8,7 @@ import {
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useAppSelector, useAppDispatch } from "../store/store";
-import { useGetNotificationsQuery } from "../store/api/api";
+import { useGetNotificationsQuery, useLogoutMutation } from "../store/api/api";
 import { logout } from "../store/slices/authSlice";
 import { useRealtimeNotifications } from '@/hooks/useRealtimeNotifications';
 
@@ -83,6 +83,7 @@ export function AppShell({
   const path      = location.pathname;
 
   const { user, isAuthenticated } = useAppSelector((s) => s.auth);
+  const [logoutUser] = useLogoutMutation();
   const userRole = user?.role as UserRole;
 
   useEffect(() => {
@@ -104,9 +105,13 @@ export function AppShell({
     ? user.nom.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
 
-  const handleLogout = () => {
-    dispatch(logout());
-    navigate({ to: "/login" });
+  const handleLogout = async () => {
+    try {
+      await logoutUser(localStorage.getItem('refresh_token')).unwrap();
+    } finally {
+      dispatch(logout());
+      navigate({ to: "/login" });
+    }
   };
 
   return (
@@ -127,7 +132,7 @@ export function AppShell({
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5" aria-label="Navigation principale">
           {nav.map((item) => {
             const active = item.to === "/app" ? path === "/app" : path.startsWith(item.to);
             const Icon   = item.icon;
@@ -135,9 +140,10 @@ export function AppShell({
               <Link
                 key={item.to}
                 to={item.to}
+                aria-current={active ? "page" : undefined}
                 className={`
                   group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-                  transition-all duration-150 relative
+                  transition-all duration-150 relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-red-800
                   ${active
                     ? "bg-white/15 text-white shadow-sm"
                     : "text-red-200 hover:bg-white/8 hover:text-white"
@@ -183,9 +189,10 @@ export function AppShell({
               <p className="text-[11px] text-red-300 mt-0.5 truncate">{roleBadge.label}</p>
             </div>
             <button
+              type="button"
               onClick={handleLogout}
-              className="h-7 w-7 rounded-lg flex items-center justify-center text-red-300 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
-              title="Déconnexion"
+              className="h-7 w-7 rounded-lg flex items-center justify-center text-red-300 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label="Se déconnecter"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
@@ -212,6 +219,7 @@ export function AppShell({
                   <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="search"
+                    aria-label="Rechercher dans l'application"
                     placeholder="Rechercher…"
                     className="w-full h-8 rounded-lg bg-gray-50 border border-gray-200 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-red-300 focus:border-red-400"
                   />
@@ -267,11 +275,12 @@ export function AppShell({
 
               return (
                 <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`
-                    flex-1 flex flex-col items-center justify-center gap-1
-                    py-2.5 px-1 relative transition-all duration-150 min-w-0
+                key={item.to}
+                to={item.to}
+                aria-current={active ? "page" : undefined}
+                className={`
+                  flex-1 flex flex-col items-center justify-center gap-1
+                  py-2.5 px-1 relative transition-all duration-150 min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-inset
                     ${active ? "text-white" : "text-red-300 hover:text-white"}
                   `}
                 >

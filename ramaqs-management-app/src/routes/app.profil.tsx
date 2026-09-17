@@ -13,7 +13,8 @@ import {
 } from "../store/api/api";
 import { logout } from "../store/slices/authSlice";
 import { useState, useRef } from "react";
-import { getToken, getCurrentTenant } from "../utils/auth";
+import { getToken } from "../utils/auth";
+import { API_BASE_URL } from "../config/endpoints";
 
 export const Route = createFileRoute("/app/profil")({
   component: ProfilPage,
@@ -260,7 +261,7 @@ function ProfilPage() {
   }
 
   const handleLogout = async () => {
-    try { await logoutUser().unwrap(); } finally {
+    try { await logoutUser(localStorage.getItem('refresh_token')).unwrap(); } finally {
       dispatch(logout());
       navigate({ to: "/login" });
     }
@@ -289,14 +290,12 @@ function ProfilPage() {
       // ✅ On bypasse RTK Query pour éviter que Content-Type: application/json
       //    écrase le multipart/form-data du FormData (avec son boundary).
       const accessToken = getToken();
-      const tenant      = getCurrentTenant();
-      const apiBase     = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api";
+      const apiBase     = API_BASE_URL;
 
       const res = await fetch(`${apiBase}/utilisateurs/${user?.id}/`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          ...(tenant ? { "X-Tenant-ID": tenant } : {}),
           // ⚠️  PAS de Content-Type ici → le browser le génère automatiquement
           //     avec le boundary correct pour multipart/form-data
         },

@@ -1,46 +1,54 @@
 // src/store/api/api.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import { getToken } from '../../utils/auth';
-import { getCurrentTenant } from '../../utils/tenant';
-import {
-  type Projet,
-  type Tache,
-  type SousTache,
-  type Client,
-  type Partenaire,
-  type Document,
-  type Conversation,
-  type Message,
-  type Notification,
-  type Budget,
-  type KPI,
-  type Ressource,
-  type PaginatedResponse,
-  type Utilisateur, 
-  type UsersListResponse, 
-  type RegisterData, 
-  type ApproveRejectData 
-} from '../interfaces';
+import { API_BASE_URL } from '../../config/endpoints';
+import { logout, updateAccessToken } from '../slices/authSlice';
+import type {Projet, Tache, SousTache, Client, Partenaire, Document, Notification, Budget, KPI, Ressource, PaginatedResponse, Utilisateur, UsersListResponse, RegisterData, ApproveRejectData} from '../interfaces';
 
-export const api = createApi({
-  reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api',
-   prepareHeaders: (headers) => {
+const rawBaseQuery = fetchBaseQuery({
+    baseUrl: API_BASE_URL,
+    prepareHeaders: (headers) => {
     const token = getToken();
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
-    const tenant = getCurrentTenant();
-    if (tenant) {
-      headers.set('X-Tenant-ID', tenant);
-    }
    return headers;
    },
-  }),
-   
-    
-  tagTypes: ['Projet', 'Tache', 'SousTache', 'Client', 'Partenaire', 'Document', 'Conversation', 'Message', 'Notification', 'KPI', 'Ressource', 'User', 'Consultant', 'Budget'],
+  });
+
+const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
+  args, apiContext, extraOptions,
+) => {
+  let result = await rawBaseQuery(args, apiContext, extraOptions);
+  const url = typeof args === 'string' ? args : args.url;
+
+  if (result.error?.status === 401 && !url.includes('/auth/refresh/')) {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (refreshToken) {
+      const refreshResult = await rawBaseQuery(
+        { url: '/auth/refresh/', method: 'POST', body: { refresh: refreshToken } },
+        apiContext,
+        extraOptions,
+      );
+      const access = (refreshResult.data as { access?: string } | undefined)?.access;
+      if (access) {
+        apiContext.dispatch(updateAccessToken(access));
+        result = await rawBaseQuery(args, apiContext, extraOptions);
+      } else {
+        apiContext.dispatch(logout());
+      }
+    } else {
+      apiContext.dispatch(logout());
+    }
+  }
+  return result;
+};
+
+export const api = createApi({
+  reducerPath: 'api',
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ['Projet', 'Tache', 'SousTache', 'Client', 'Partenaire', 'Document', 'Notification', 'KPI', 'Ressource', 'User', 'Consultant', 'Budget'],
   endpoints: (builder) => ({
 
     // ========== PROJETS ==========
@@ -69,7 +77,7 @@ transformResponse: (response: any) => {
         statut: projet.statut,
         budget: projet.budget,
         avancement: projet.avancement_globale || projet.avancement,
-        chefProjetId: projet.chefProjetId || projet.chef_projet_id,
+        chefProjetId: projet.chefProjetId || projet.chef_projet_id || projet.chef_projet?.[0],
         chefProjetNom: projet.chef_projet_nom,
         clientId: projet.clientId || projet.client_id,
         clientNom: projet.client_nom,  // ← AJOUTE CETTE LIGNE
@@ -100,7 +108,7 @@ transformResponse: (response: any) => {
         statut: projet.statut,
         budget: projet.budget,
         avancement: projet.avancement_globale || projet.avancement,
-        chefProjetId: projet.chefProjetId || projet.chef_projet_id,
+        chefProjetId: projet.chefProjetId || projet.chef_projet_id || projet.chef_projet?.[0],
         chefProjetNom: projet.chef_projet_nom,
         clientId: projet.clientId || projet.client_id,
         clientNom: projet.client_nom,  // ← AJOUTE CETTE LIGNE
@@ -178,10 +186,6 @@ transformResponse: (response: any) => {
       ],
     }),
 
-    getProjetStats: builder.query<any, string>({
-      query: (id) => `/projets/${id}/stats/`,
-      providesTags: (_result, _error, id) => [{ type: 'Projet', id }],
-    }),
     getProjetMembres: builder.query<{
       projet_id: string;
       projet_nom: string;
@@ -212,8 +216,8 @@ getTaches: builder.query<PaginatedResponse<Tache>, {
     params: {
       page: params?.page || 1,
       page_size: params?.pageSize || 100,
-      projet_id: params?.projetId,
-      assigne_a: params?.assigneA,
+      projet: params?.projetId,
+      consultant: params?.assigneA,
       statut: params?.statut,
       priorite: params?.priorite,
     },
@@ -224,6 +228,7 @@ getTaches: builder.query<PaginatedResponse<Tache>, {
       if (statut === 'en_cours') return 'en_cours';
       if (statut === 'a_faire') return 'a_faire';
       if (statut === 'termine') return 'termine';
+      if (statut === 'en_attente_validation') return 'en_attente_validation';
       if (statut === 'en cours') return 'en_cours';  // ← Support pour l'ancien format
       return 'a_faire';
     };
@@ -289,7 +294,7 @@ getTacheById: builder.query<Tache, string>({
     status: task.status === 'en cours' ? 'en_cours' : (task.status || task.statut || 'a_faire'),
     avancement: Number(task.avancement) || 0,
     dateEcheance: task.dateEcheance || task.date_fin_prevue || new Date().toISOString().split('T')[0],
-    projetId: task.projetId || task.projet_id || "",
+    projetId: task.projet || task.projetId || task.projet_id || "",
     assigneA: task.consultant || "",
     assigneNom: task.consultant_nom || "",
     dateCreation: task.dateCreation || task.date_creation || new Date().toISOString(),
@@ -297,7 +302,7 @@ getTacheById: builder.query<Tache, string>({
     commentaires: task.commentaires || [],
     progress: Number(task.avancement) || 0,
     assignee: task.assigneNom || task.consultant_nom || "Non assigné",
-    projectId: task.projetId || task.projet_id || "",
+    projectId: task.projet || task.projetId || task.projet_id || "",
     dueDate: task.dueDate || task.dateEcheance || task.date_fin_prevue || new Date().toISOString().split('T')[0],
   }),
   providesTags: (_result, _error, id) => [{ type: 'Tache', id }],
@@ -331,7 +336,7 @@ updateTache: builder.mutation<Tache, { id: string; data: Partial<Tache> }>({
       avancement: arg.data.avancement,
       date_debut: arg.data.dateDebut,
       date_fin_prevue: arg.data.dateEcheance,
-      statut: arg.data.status === 'en_cours' ? 'en cours' : arg.data.status,
+      statut: arg.data.status,
       // ✅ CORRECTION
       projet: arg.data.projetId,
       consultant: arg.data.assigneA,
@@ -384,79 +389,10 @@ deleteTache: builder.mutation<void, string>({
   ],
 }),
 
-getTachesByProjet: builder.query<PaginatedResponse<Tache>, { projetId: string; page?: number; pageSize?: number }>({
-  query: ({ projetId, page, pageSize }) => ({
-    url: `/projets/${projetId}/taches/`,
-    params: {
-      page: page || 1,
-      page_size: pageSize || 10,
-    },
-  }),
-  transformResponse: (response: any) => {
-    if (Array.isArray(response)) {
-      const mappedResults = response.map((task: any) => ({
-        id: task.id,
-        title: task.title || task.titre,
-        description: task.description,
-        priority: task.priority || task.priorite,
-        status: task.status === 'en cours' ? 'en_cours' : (task.status || task.statut || 'a_faire'),
-        avancement: task.avancement,
-        dateEcheance: task.dateEcheance || task.date_fin_prevue,
-        projetId: task.projetId || task.projet_id,
-        assigneNom: task.assigneNom || task.consultant_nom,
-        assigneA: task.assigneA || task.consultant_id,
-        dateCreation: task.dateCreation || task.date_creation,
-      }));
-      
-      return {
-        count: mappedResults.length,
-        results: mappedResults,
-        next: null,
-        previous: null,
-      };
-    }
-    
-    if (response && response.results) {
-      const mappedResults = response.results.map((task: any) => ({
-        id: task.id,
-        title: task.title || task.titre,
-        description: task.description,
-        priority: task.priority || task.priorite,
-        status: task.status === 'en cours' ? 'en_cours' : (task.status || task.statut || 'a_faire'),
-        avancement: task.avancement,
-        dateEcheance: task.dateEcheance || task.date_fin_prevue,
-        projetId: task.projetId || task.projet_id,
-        assigneNom: task.assigneNom || task.consultant_nom,
-        assigneA: task.assigneA || task.consultant_id,
-        dateCreation: task.dateCreation || task.date_creation,
-      }));
-      
-      return {
-        ...response,
-        results: mappedResults,
-      };
-    }
-    
-    return {
-      count: 0,
-      results: [],
-      next: null,
-      previous: null,
-    };
-  },
-  providesTags: (result) =>
-    result?.results
-      ? [
-          ...result.results.map((item) => ({ type: 'Tache' as const, id: item.id })),
-          { type: 'Tache', id: 'LIST' },
-        ]
-      : [{ type: 'Tache', id: 'LIST' }],
-}),
-
     // ========== SOUS-TÂCHES ==========
     getSousTaches: builder.query<PaginatedResponse<SousTache>, { projetId?: string; assigneA?: string; statut?: string; page?: number }>({
       query: (params) => ({
-        url: '/sous-taches/',
+        url: '/sousTaches/',
         params,
       }),
       providesTags: (result) =>
@@ -469,13 +405,13 @@ getTachesByProjet: builder.query<PaginatedResponse<Tache>, { projetId: string; p
     }),
 
     getSousTacheById: builder.query<SousTache, string>({
-      query: (id) => `/sous-taches/${id}/`,
+      query: (id) => `/sousTaches/${id}/`,
       providesTags: (_result, _error, id) => [{ type: 'SousTache', id }],
     }),
 
     createSousTache: builder.mutation<SousTache, Partial<SousTache>>({
       query: (newSousTache) => ({
-        url: '/sous-taches/',
+        url: '/sousTaches/',
         method: 'POST',
         body: newSousTache,
       }),
@@ -716,82 +652,6 @@ getTachesByProjet: builder.query<PaginatedResponse<Tache>, { projetId: string; p
       invalidatesTags: [{ type: 'Document', id: 'LIST' }],
      }),
 
-    // ========== CONVERSATIONS ==========
-    getConversations: builder.query<PaginatedResponse<Conversation>, { projetId?: string; page?: number }>({
-      query: (params) => ({
-        url: '/conversations/',
-        params,
-      }),
-      providesTags: (result) =>
-        result?.results
-          ? [
-              ...result.results.map((item) => ({ type: 'Conversation' as const, id: item.id })),
-              { type: 'Conversation', id: 'LIST' },
-            ]
-          : [{ type: 'Conversation', id: 'LIST' }],
-    }),
-
-    getConversationById: builder.query<Conversation, string>({
-      query: (id) => `/conversations/${id}/`,
-      providesTags: (_result, _error, id) => [{ type: 'Conversation', id }],
-    }),
-
-    createConversation: builder.mutation<Conversation, Partial<Conversation>>({
-      query: (newConversation) => ({
-        url: '/conversations/',
-        method: 'POST',
-        body: newConversation,
-      }),
-      invalidatesTags: [{ type: 'Conversation', id: 'LIST' }],
-    }),
-
-    archiveConversation: builder.mutation<void, string>({
-      query: (id) => ({
-        url: `/conversations/${id}/archiver/`,
-        method: 'PATCH',
-      }),
-      invalidatesTags: (_result, _error, id) => [{ type: 'Conversation', id }],
-    }),
-
-    // ========== MESSAGES ==========
-    getMessagesByConversation: builder.query<PaginatedResponse<Message>, { conversationId: string; page?: number }>({
-      query: (arg) => ({
-        url: `/conversations/${arg.conversationId}/messages/`,
-        params: { page: arg.page },
-      }),
-      providesTags: (_result) =>
-        _result?.results
-          ? [
-              ..._result.results.map((item) => ({ type: 'Message' as const, id: item.id })),
-              { type: 'Message', id: 'LIST' },
-            ]
-          : [{ type: 'Message', id: 'LIST' }],
-    }),
-
-    sendMessage: builder.mutation<Message, { conversationId: string; contenu: string; typeMessage?: string; pieceJointe?: string }>({
-      query: (arg) => ({
-        url: `/conversations/${arg.conversationId}/messages/`,
-        method: 'POST',
-        body: {
-          contenu: arg.contenu,
-          typeMessage: arg.typeMessage,
-          pieceJointe: arg.pieceJointe,
-        },
-      }),
-      invalidatesTags: (_result, _error, arg) => [
-        { type: 'Message', id: 'LIST' },
-        { type: 'Conversation', id: arg.conversationId },
-      ],
-    }),
-
-    markMessageAsRead: builder.mutation<void, string>({
-      query: (messageId) => ({
-        url: `/messages/${messageId}/lire/`,
-        method: 'PATCH',
-      }),
-      invalidatesTags: (_result, _error, messageId) => [{ type: 'Message', id: messageId }],
-    }),
-
     // ========== NOTIFICATIONS ==========
     // store/api/api.ts
 getNotifications: builder.query({
@@ -942,16 +802,6 @@ getNotifications: builder.query({
       ],
     }),
 
-    // ========== TABLEAU DE BORD ==========
-    getDashboardStats: builder.query<any, void>({
-      query: () => '/dashboard/stats/',
-      providesTags: ['Projet', 'Tache', 'SousTache', 'KPI'],
-    }),
-
-    getRecentActivities: builder.query<any[], { limit?: number }>({
-      query: (arg) => `/dashboard/activites/?limit=${arg?.limit || 10}`,
-    }),
-
     // ========== AUTHENTIFICATION ==========
     login: builder.mutation({
       query: (credentials) => ({
@@ -970,9 +820,10 @@ getNotifications: builder.query({
     }),
 
     logout: builder.mutation({
-      query: () => ({
+      query: (refreshToken: string | null) => ({
         url: '/auth/logout/',
         method: 'POST',
+        body: refreshToken ? { refresh_token: refreshToken } : {},
       }),
     }),
 
@@ -1184,7 +1035,6 @@ export const {
   useUpdateProjetMutation,
   usePatchProjetMutation,
   useDeleteProjetMutation,
-  useGetProjetStatsQuery,
   useGetProjetMembresQuery,
   
   // Sous-tâches
@@ -1216,17 +1066,6 @@ export const {
   useUploadDocumentMutation,
   useDeleteDocumentMutation,
   
-  // Conversations
-  useGetConversationsQuery,
-  useGetConversationByIdQuery,
-  useCreateConversationMutation,
-  useArchiveConversationMutation,
-  
-  // Messages
-  useGetMessagesByConversationQuery,
-  useSendMessageMutation,
-  useMarkMessageAsReadMutation,
-  
   // Notifications
   useGetNotificationsQuery,
   useMarkNotificationAsReadMutation,
@@ -1239,10 +1078,6 @@ export const {
   useCreateKPIMutation,
   useUpdateKPIMutation,
   useDeleteKPIMutation,
-  
-  // Dashboard
-  useGetDashboardStatsQuery,
-  useGetRecentActivitiesQuery,
   
   // Ressources
   useGetRessourcesQuery,
@@ -1258,7 +1093,6 @@ export const {
   useUpdateTacheMutation,
   usePatchTacheMutation,
   useDeleteTacheMutation,
-  useGetTachesByProjetQuery,
   
   // Authentification
   useLoginMutation,
@@ -1289,10 +1123,10 @@ export const {
   useCreateBudgetMutation,
   useUpdateBudgetMutation,
   useDeleteBudgetMutation,
-  //chefs 
+  // chefs 
   useGetChefsProjetQuery,
   useGetChefProjetByIdQuery,
   
 } = api;
 
-export default api; 
+export default api;

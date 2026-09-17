@@ -6,6 +6,7 @@ import {
   Calendar, Shield, Users, Target, Award, Zap, Loader2
 } from "lucide-react";
 import { useRegisterMutation } from "../store/api/api";
+import { API_BASE_URL } from "../config/endpoints";
 
 export const Route = createFileRoute("/register")({
   component: RegisterPage,
@@ -90,12 +91,10 @@ const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   if (!validateStep2()) return;
   
-  console.log("📤 Données envoyées:", formData);
-  
   try {
     // ✅ TOUS LES RÔLES (sauf direction) utilisent le même endpoint
     // Le backend déterminera le workflow en fonction du rôle
-    const response = await fetch('http://localhost:8000/api/users/register/', {
+    const response = await fetch(`${API_BASE_URL}/users/register/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

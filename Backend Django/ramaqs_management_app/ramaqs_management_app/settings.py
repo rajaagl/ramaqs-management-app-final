@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 
 load_dotenv()
@@ -17,15 +18,33 @@ if not SECRET_KEY:
 
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
+if not DEBUG:
+    required_production_settings = ('DJANGO_ALLOWED_HOSTS', 'DJANGO_CORS_ORIGINS', 'FRONTEND_URL', 'DB_PASSWORD')
+    missing_production_settings = [name for name in required_production_settings if not os.environ.get(name)]
+    if missing_production_settings:
+        raise ImproperlyConfigured(
+            'Variables de production manquantes : ' + ', '.join(missing_production_settings)
+        )
+
 # ✅ Configuration cookies sécurisés
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE   = os.getenv('COOKIE_SECURE', 'False') == 'True'
+SESSION_COOKIE_SECURE   = not DEBUG or os.getenv('COOKIE_SECURE', 'False') == 'True'
 SESSION_COOKIE_SAMESITE = os.getenv('COOKIE_SAMESITE', 'Lax')
 CSRF_COOKIE_HTTPONLY    = False   # Doit être False pour que le frontend puisse le lire
-CSRF_COOKIE_SECURE      = os.getenv('COOKIE_SECURE', 'False') == 'True'
+CSRF_COOKIE_SECURE      = not DEBUG or os.getenv('COOKIE_SECURE', 'False') == 'True'
 CSRF_COOKIE_SAMESITE    = os.getenv('COOKIE_SAMESITE', 'Lax')
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_SSL_REDIRECT = not DEBUG or os.getenv('DJANGO_SECURE_SSL_REDIRECT', 'False') == 'True'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_HSTS_SECONDS', '31536000' if not DEBUG else '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = False
+DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
 
 
 INSTALLED_APPS = [
@@ -55,7 +74,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'ramaqs_management_plateforme.middleware.TenantMiddleware',
 ]
 
 ROOT_URLCONF = 'ramaqs_management_app.urls'
@@ -63,15 +81,15 @@ ROOT_URLCONF = 'ramaqs_management_app.urls'
 #corsheaders settings
 
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = os.environ.get(
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.environ.get(
     'DJANGO_CORS_ORIGINS',
     'http://localhost:3000'
-).split(',')
+).split(',') if origin.strip()]
 
 CORS_ALLOW_HEADERS = [
     'accept', 'accept-encoding', 'authorization',
     'content-type', 'dnt', 'origin', 'user-agent',
-    'x-csrftoken', 'x-requested-with', 'x-tenant-id',
+    'x-csrftoken', 'x-requested-with',
 ]
 CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
 CORS_ALLOW_CREDENTIALS = True
@@ -98,7 +116,7 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [("127.0.0.1", 6379)],
+            "hosts": [os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')],
         },
     }
 }
@@ -146,8 +164,8 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
-        'user': '1000/hour',
+        'anon': '30/hour',
+        'user': '600/hour',
     },
 }
 
@@ -155,18 +173,19 @@ REST_FRAMEWORK = {
 # EMAIL 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp-relay.brevo.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp-relay.brevo.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = 'RAMAQS Consulting <ne_pas_repondre@ramaqs.com>'
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'RAMAQS Consulting <ne_pas_repondre@ramaqs.com>')
+EMAIL_TIMEOUT = 10
 
 
 # JWT
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -201,8 +220,8 @@ LOGGING = {
         'console': {'class': 'logging.StreamHandler'},
     },
     'loggers': {
-        'django.core.mail': {'handlers': ['console'], 'level': 'DEBUG'},
-        'ramaqs_management_plateforme.services': {'handlers': ['console'], 'level': 'DEBUG'},
+        'django.core.mail': {'handlers': ['console'], 'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO')},
+        'ramaqs_management_plateforme.services': {'handlers': ['console'], 'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO')},
     },
 }
 
@@ -212,7 +231,7 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # WHATSAPP 
 
-WHATSAPP_ENABLED = os.environ.get('WHATSAPP_ENABLED', 'True') == 'True'
+WHATSAPP_ENABLED = os.environ.get('WHATSAPP_ENABLED', 'False') == 'True'
 GREEN_API_ID_INSTANCE = os.environ.get('GREEN_API_ID_INSTANCE')
 GREEN_API_API_TOKEN = os.environ.get('GREEN_API_API_TOKEN')
 COUNTRY_CODE = '212'
@@ -222,15 +241,3 @@ COMPANY_NAME = 'RAMAQS Consulting'
 COMPANY_PHONE = '+212 5 22 22 22 22'
 COMPANY_EMAIL = 'contact@ramaqs.ma'
 
-
-#smtp
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
-
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

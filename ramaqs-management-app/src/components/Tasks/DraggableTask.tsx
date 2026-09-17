@@ -178,7 +178,7 @@ export function DraggableTask({
               ${isOverdue ? 'bg-red-50 text-red-600' : isDueSoon ? 'bg-amber-50 text-amber-600' : 'text-gray-400'}`}
             >
               {isOverdue ? <AlertCircle className="h-3 w-3" /> : isDueSoon ? <Clock className="h-3 w-3" /> : <Calendar className="h-3 w-3" />}
-              {isOverdue ? `${Math.abs(daysLeft!)}j retard` : daysLeft === 0 ? "Auj." : `${daysLeft}j`}
+              {isOverdue ? `${Math.abs(daysLeft)}j retard` : daysLeft === 0 ? "Auj." : `${daysLeft}j`}
             </span>
           )}
         </div>

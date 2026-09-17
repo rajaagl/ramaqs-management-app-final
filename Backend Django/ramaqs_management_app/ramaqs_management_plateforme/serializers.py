@@ -1,11 +1,8 @@
-from email import message
-from turtle import title
-
 from rest_framework import serializers
 from .models import (
     Projet, Tache, SousTache, Document, Commentaire,
-    Notification, Conversation, Message, Kpi, Budget,
-    Ressource, Utilisateur, Tenant, TenantMembership,
+    Notification, Kpi, Budget,
+    Ressource, Utilisateur,
     Direction, ChefProjet, Consultant, Client, Partenaire
 )
 
@@ -14,13 +11,13 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Avg
+from django.urls import reverse
 # serializers.py
 from .services.notification_service import NotificationService
 # serializers.py
 from rest_framework import serializers
 from .models import Document, Notification, Utilisateur, Projet
 from .services.notification_service import NotificationService
-from ramaqs_management_plateforme.models import Tenant
 from rest_framework import serializers
 from .models import Utilisateur, Tache
 
@@ -49,24 +46,18 @@ class UtilisateurSerializer(serializers.ModelSerializer):
             'poste',
             'doit_changer_mot_de_passe', 
         ]
-        read_only_fields = ['id', 'date_creation', 'dernier_connexion']
-
-class TenantSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Tenant
-        fields = ['id', 'nom', 'slug', 'secteur_activite', 'logo', 'date_creation', 'actif']
-        read_only_fields = ['id', 'date_creation']
-
-
-class TenantMembershipSerializer(serializers.ModelSerializer):
-    user_email = serializers.ReadOnlyField(source='user.email')
-    tenant_nom = serializers.ReadOnlyField(source='tenant.nom')
-    
-    class Meta:
-        model = TenantMembership
-        fields = ['id', 'user', 'user_email', 'tenant', 'tenant_nom', 'role', 'date_joined']
-        read_only_fields = ['id', 'date_joined']
-
+        read_only_fields = [
+            'id', 
+            'date_creation', 
+            'dernier_connexion', 
+            'role', 
+            'statut_approbation', 
+            'justification_rejet', 
+            'date_approbation', 
+            'approuve_par', 
+            'is_active', 
+            'doit_changer_mot_de_passe'
+        ]
 
 # ========== MODÈLES SPÉCIFIQUES (HÉRITENT DE UTILISATEUR) ==========
 
@@ -130,8 +121,8 @@ class ConsultantSerializer(serializers.ModelSerializer):
             return list(chefs_noms) if chefs_noms else []
             
         except Exception as e:
-            # En cas d'erreur, retourner une liste vide
-            print(f"Erreur dans get_chef_projet_noms: {e}")
+            
+            
             return []
     def get_nombre_taches(self, obj):
         """Nombre total de tâches assignées à ce consultant"""
@@ -193,21 +184,26 @@ class PartenaireSerializer(serializers.ModelSerializer):
 
 class ProjetSerializer(serializers.ModelSerializer):
     client_nom = serializers.ReadOnlyField(source='client.nom', default=None)
-    chef_projet_nom = serializers.ReadOnlyField(source='chef_projet.nom', default=None)
+    chef_projet_nom = serializers.SerializerMethodField()
     partenaires_noms = serializers.SerializerMethodField()
     avancement_globale = serializers.SerializerMethodField()  # ← Écrase le champ existant
     nombre_membres = serializers.SerializerMethodField()
     
     class Meta:
         model = Projet
-        fields = ['id', 'tenant', 'nom', 'description', 'objectsif', 'date_debut',
+        fields = ['id', 'nom', 'description', 'objectsif', 'date_debut',
                   'date_fin_prevue', 'date_fin_reelle', 'budget', 'statut',
                   'avancement_globale', 'client', 'client_nom', 'chef_projet',
-                  'chef_projet_nom', 'partenaires', 'partenaires_noms', 'domaine','nombre_membres']
-        read_only_fields = ['id', 'tenant']
+                  'chef_projet_nom', 'partenaires', 'partenaires_noms', 'domaine',
+                  'priorite', 'nombre_membres']
+        read_only_fields = ['id']
     
     def get_partenaires_noms(self, obj):
         return [p.nom for p in obj.partenaires.all()]
+
+    def get_chef_projet_nom(self, obj):
+        return ', '.join(chef.nom for chef in obj.chef_projet.all())
+
     def get_avancement_globale(self, obj):
         """Calcule l'avancement moyen des tâches du projet"""
         taches = obj.taches.all()
@@ -241,13 +237,18 @@ class ProjetSerializer(serializers.ModelSerializer):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Pour le formulaire HTML de DRF, limiter les choix aux utilisateurs avec rôle partenaire
-        if 'request' in self.context:
-            tenant = Tenant.objects.first()
-            self.fields['partenaires'].queryset = Utilisateur.objects.filter(
-                role='partenaire',
-                memberships__tenant=tenant
-            )
+        request = self.context.get('request')
+        self.fields['partenaires'].queryset = Utilisateur.objects.filter(role='partenaire', is_active=True)
+
+    def validate(self, data):
+        date_debut = data.get('date_debut', self.instance.date_debut if self.instance else None)
+        date_fin = data.get('date_fin_prevue', self.instance.date_fin_prevue if self.instance else None)
+        budget = data.get('budget', self.instance.budget if self.instance else None)
+        if date_debut and date_fin and date_fin < date_debut:
+            raise serializers.ValidationError({'date_fin_prevue': 'La date de fin doit être postérieure à la date de début.'})
+        if budget is not None and budget < 0:
+            raise serializers.ValidationError({'budget': 'Le budget ne peut pas être négatif.'})
+        return data
 
     # serializers.py
 from rest_framework import serializers
@@ -267,10 +268,10 @@ class TacheSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Tache
-        fields = ['id', 'tenant', 'titre', 'description', 'priorite', 'avancement',
+        fields = ['id', 'titre', 'description', 'priorite', 'avancement',
                   'date_debut', 'date_fin_prevue', 'date_fin_reelle', 'statut',
                   'projet', 'projet_nom', 'consultant', 'consultant_nom']
-        read_only_fields = ['id', 'tenant']
+        read_only_fields = ['id']
 
     def update(self, instance, validated_data):
                     
@@ -287,10 +288,7 @@ class TacheSerializer(serializers.ModelSerializer):
         nouvel_consultant = validated_data.get('consultant', instance.consultant)
         nouvel_priorite = validated_data.get('priorite', instance.priorite)
 
-        print(f"[SERIALIZER] Tâche: {instance.titre}")
-        print(f"[SERIALIZER] Ancien statut: '{ancien_statut}'")
-        print(f"[SERIALIZER] Nouveau statut: '{nouvel_statut}'")
-        print(f"[SERIALIZER] Changement statut: {ancien_statut != nouvel_statut}")
+       
         
         # Liste des champs modifiés (pour notification générale)
         champs_modifies = []
@@ -303,7 +301,7 @@ class TacheSerializer(serializers.ModelSerializer):
         #  AJOUTER LA GESTION DU STATUT EN_ATTENTE_VALIDATION
         if nouvel_avancement == 100 and nouvel_statut in ['a_faire', 'en_cours']:
             validated_data['statut'] = 'en_attente_validation'
-            print(f"[SERIALIZER]  Tâche passée en 'en_attente_validation'")
+            
 
         # Logique d'avancement automatique selon le statut
         if nouvel_statut == 'a_faire':
@@ -316,7 +314,7 @@ class TacheSerializer(serializers.ModelSerializer):
         
         # Récupérer l'utilisateur depuis le contexte
         request = self.context.get('request')
-        print(f"[SERIALIZER] Contexte request présent: {request is not None}")
+        
         utilisateur = request.user if request and hasattr(request, 'user') else None
         
         if not utilisateur:
@@ -355,15 +353,11 @@ class TacheSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
     
     
-    #  Ajouter le tenant
         request = self.context.get('request')
-        if request and hasattr(request, 'tenant'):
-            validated_data['tenant'] = request.tenant
-            print(f"Tenant ajouté: {request.tenant}")
     
     # UNE SEULE CRÉATION
         instance = super().create(validated_data)
-        print(f"Instance créée avec ID: {instance.id}")
+       
     
       # NOTIFICATION : Nouvelle tâche créée
         utilisateur = request.user if request and hasattr(request, 'user') else None
@@ -372,6 +366,8 @@ class TacheSerializer(serializers.ModelSerializer):
                 tache=instance,
                 utilisateur=utilisateur
             )
+
+        self.mettre_a_jour_avancement_projet(instance.projet)
 
         return instance  
     
@@ -421,6 +417,11 @@ class TacheSerializer(serializers.ModelSerializer):
             elif projet.avancement_globale < 100 and projet.statut == 'termine':
                 projet.statut = 'en_cours'
             projet.save()
+        else:
+            projet.avancement_globale = 0
+            if projet.statut == 'termine':
+                projet.statut = 'en_cours'
+            projet.save(update_fields=['avancement_globale', 'statut'])
     
 
     # VALIDATION DU STATUT
@@ -437,6 +438,9 @@ class TacheSerializer(serializers.ModelSerializer):
         """Validation croisée entre avancement et statut"""
         avancement = data.get('avancement', self.instance.avancement if self.instance else 0)
         statut = data.get('statut', self.instance.statut if self.instance else 'a_faire')
+
+        if avancement < 0 or avancement > 100:
+            raise serializers.ValidationError({'avancement': "L'avancement doit être compris entre 0 et 100."})
 
      # Si avancement = 100 et statut = 'a_faire' ou 'en_cours' -> passer en 'en_attente_validation'
         if avancement == 100 and statut in ['a_faire', 'en_cours']:
@@ -460,9 +464,9 @@ class SousTacheSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = SousTache
-        fields = ['id', 'tenant', 'titre', 'statut', 'avancement', 'date_echeance',
+        fields = ['id', 'titre', 'statut', 'avancement', 'date_echeance',
                   'tache', 'tache_titre']
-        read_only_fields = ['id', 'tenant']
+        read_only_fields = ['id']
 
 
 # ========== DOCUMENTS & COMMENTAIRES ==========
@@ -482,13 +486,14 @@ class DocumentSerializer(serializers.ModelSerializer):
             'taille', 'taille_formatee', 'version',
             'projet', 'projet_nom', 'uploaded_by', 'uploaded_by_nom', 'date_upload',
         ]
-        read_only_fields = ['id', 'chemin', 'taille', 'taille_formatee', 'projet_nom', 'uploaded_by_nom', 'date_upload']
+        read_only_fields = ['id', 'chemin', 'taille', 'taille_formatee', 'projet_nom', 'uploaded_by', 'uploaded_by_nom', 'date_upload']
 
     def get_chemin(self, obj):
         request = self.context.get('request')
-        if obj.fichier and request:
-            return request.build_absolute_uri(obj.fichier.url)
-        return obj.fichier.url if obj.fichier else None
+        if not obj.fichier:
+            return None
+        url = reverse('document-download', kwargs={'pk': obj.id})
+        return request.build_absolute_uri(url) if request else url
 
     def get_taille_formatee(self, obj):
         if not obj.taille:
@@ -500,15 +505,49 @@ class DocumentSerializer(serializers.ModelSerializer):
             size /= 1024
         return f"{size:.1f} To"
 
+    def validate_fichier(self, fichier):
+        allowed_extensions = {'.pdf', '.docx', '.xlsx', '.pptx', '.png', '.jpg', '.jpeg'}
+        allowed_content_types = {
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'image/png', 'image/jpeg',
+        }
+        name = fichier.name.lower()
+        extension = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
+        if extension not in allowed_extensions or fichier.content_type not in allowed_content_types:
+            raise serializers.ValidationError("Type de fichier non autorisé.")
+        if fichier.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("Le fichier ne doit pas dépasser 10 Mo.")
+        signatures = {
+            '.pdf': (b'%PDF-',),
+            '.png': (b'\x89PNG\r\n\x1a\n',),
+            '.jpg': (b'\xff\xd8\xff',),
+            '.jpeg': (b'\xff\xd8\xff',),
+            # Les formats Office Open XML sont des archives ZIP.
+            '.docx': (b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'),
+            '.xlsx': (b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'),
+            '.pptx': (b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'),
+        }
+        try:
+            header = fichier.read(8)
+            fichier.seek(0)
+        except (AttributeError, OSError) as exc:
+            raise serializers.ValidationError("Le fichier est illisible.") from exc
+        if not header.startswith(signatures[extension]):
+            raise serializers.ValidationError("Le contenu du fichier ne correspond pas à son type déclaré.")
+        return fichier
+
 class CommentaireSerializer(serializers.ModelSerializer):
     utilisateur_nom = serializers.ReadOnlyField(source='utilisateur.nom')
     tache_titre = serializers.ReadOnlyField(source='tache.titre')
     
     class Meta:
         model = Commentaire
-        fields = ['id', 'tenant', 'contenu', 'date_publication', 'utilisateur',
+        fields = ['id', 'contenu', 'date_publication', 'utilisateur',
                   'utilisateur_nom', 'tache', 'tache_titre']
-        read_only_fields = ['id', 'tenant', 'date_publication']
+        read_only_fields = ['id', 'date_publication']
 
 
 # ========== NOTIFICATIONS ==========
@@ -518,42 +557,10 @@ class NotificationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Notification
-        fields = ['id', 'tenant', 'type', 'titre', 'message', 'lue',
-                  'date_envoi', 'utilisateur', 'utilisateur_nom']
-        read_only_fields = ['id', 'tenant', 'date_envoi']
-
-
-# ========== CONVERSATIONS & MESSAGES ==========
-
-class ConversationSerializer(serializers.ModelSerializer):
-    projet_nom = serializers.ReadOnlyField(source='projet.nom')
-    dernier_message = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Conversation
-        fields = ['id', 'tenant', 'titre', 'date_creation', 'date_dernier_message',
-                  'projet', 'projet_nom', 'dernier_message']
-        read_only_fields = ['id', 'tenant', 'date_creation', 'date_dernier_message']
-    
-    def get_dernier_message(self, obj):
-        dernier = obj.messages.order_by('-date_envoi').first()
-        if dernier:
-            return {
-                'contenu': dernier.contenu[:50],
-                'date': dernier.date_envoi,
-                'expediteur': dernier.expediteur.nom
-            }
-        return None
-
-
-class MessageSerializer(serializers.ModelSerializer):
-    expediteur_nom = serializers.ReadOnlyField(source='expediteur.nom')
-    
-    class Meta:
-        model = Message
-        fields = ['id', 'tenant', 'contenu', 'date_envoi', 'lu', 'type_message',
-                  'conversation', 'expediteur', 'expediteur_nom']
-        read_only_fields = ['id', 'tenant', 'date_envoi']
+        fields = ['id', 'type', 'titre', 'message', 'lue', 'lien_action',
+                  'entite_id', 'entite_type', 'projet', 'date_envoi',
+                  'utilisateur', 'utilisateur_nom']
+        read_only_fields = ['id', 'date_envoi', 'utilisateur']
 
 
 # ========== KPI & BUDGET ==========
@@ -563,9 +570,9 @@ class KpiSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Kpi
-        fields = ['id', 'tenant', 'nom', 'valeur_cible', 'valeur_actuelle',
+        fields = ['id', 'nom', 'valeur_cible', 'valeur_actuelle',
                   'unite', 'seuil_alerte', 'projet', 'projet_nom']
-        read_only_fields = ['id', 'tenant']
+        read_only_fields = ['id']
 
 
 class BudgetSerializer(serializers.ModelSerializer):
@@ -573,9 +580,9 @@ class BudgetSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Budget
-        fields = ['id', 'tenant', 'montant_total', 'montant_depense', 
+        fields = ['id', 'montant_total', 'montant_depense', 
                   'montant_restant', 'devise', 'projet', 'projet_nom']
-        read_only_fields = ['id', 'tenant']
+        read_only_fields = ['id']
 
 
 # ========== RESSOURCES ==========
@@ -585,9 +592,9 @@ class RessourceSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Ressource
-        fields = ['id', 'tenant', 'type', 'nom', 'cout_unitaire', 'disponible', 
+        fields = ['id', 'type', 'nom', 'cout_unitaire', 'disponible', 
                   'projet', 'projets_noms']
-        read_only_fields = ['id', 'tenant']
+        read_only_fields = ['id']
     
     def get_projets_noms(self, obj):
         return [p.nom for p in obj.projet.all()]
@@ -603,13 +610,11 @@ from rest_framework import serializers
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
     def validate(self, attrs):
-        print(f"Données reçues: {attrs}")
         
         # Récupérer l'email et le password
         email = attrs.get('email', attrs.get('username'))
         password = attrs.get('password')
-        print(f"Tentative de connexion: email={email}")
-        print(f"Longueur du mot de passe: {len(password) if password else 0}")
+        
         
         #  Vérifier si l'utilisateur existe
         from ramaqs_management_plateforme.models import Utilisateur
@@ -618,23 +623,20 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         
         try:
             user = Utilisateur.objects.get(email=email)
-            print(f"Utilisateur trouvé dans la base:")
-            print(f"   - Email: {user.email}")
-            print(f"   - statut_approbation: {user.statut_approbation}")
-            print(f"   - is_active: {user.is_active}")
+           
         except Utilisateur.DoesNotExist:
-            print(f"Aucun utilisateur trouvé avec l'email: '{email}'")
+            
             raise serializers.ValidationError('Email ou mot de passe incorrect')
         
         # Vérifier le mot de passe
         password_correct = check_password(password, user.password)
-        print(f"Résultat check_password: {password_correct}")
+        
         
         if not password_correct:
-            print(f" Mot de passe incorrect pour: {email}")
+            
             raise serializers.ValidationError('Email ou mot de passe incorrect')
         
-        print("Mot de passe correct!")
+        
         
         # VÉRIFIER PENDING (UN SEUL BLOC, AVANT is_active)
         if user.statut_approbation == 'pending':
@@ -653,15 +655,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user.is_active:
             raise serializers.ValidationError('Compte désactivé')
         
-        print(f"Utilisateur authentifié: {user.email}, rôle: {user.role}")
+        
         
         # Générer les tokens
         refresh = RefreshToken.for_user(user)
-        
-        # Récupérer le membership
-        membership = None
-        if hasattr(user, 'memberships') and user.memberships.exists():
-            membership = user.memberships.first()
         
         # Structure de la réponse
         data = {
@@ -671,7 +668,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'id': str(user.id),
                 'nom': user.nom,
                 'email': user.email,
-                'role': membership.role if membership else user.role,
+                'role': user.role,
                 'is_active': user.is_active,
                 'statut_approbation': user.statut_approbation,
             }
@@ -680,16 +677,5 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Vérifier si l'utilisateur doit changer son mot de passe
         if hasattr(user, 'doit_changer_mot_de_passe') and user.doit_changer_mot_de_passe:
             data['doit_changer_mot_de_passe'] = True
-        
-        # Ajouter les infos tenant si disponible
-        if membership and membership.tenant:
-            data['tenant'] = {
-                'id': str(membership.tenant.id),
-                'nom': membership.tenant.nom,
-                'slug': getattr(membership.tenant, 'slug', None),
-            }
-        
-        print(f"✅ Connexion réussie pour {user.email}")
-        print("=" * 60)
         
         return data

@@ -1,5 +1,6 @@
 // src/store/slices/authSlice.ts
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { createSlice  } from '@reduxjs/toolkit';
+import type {PayloadAction} from '@reduxjs/toolkit';
 
 interface User {
   id: string;
@@ -14,7 +15,6 @@ interface User {
 
 interface AuthState {
   user: User | null;
-  tenantId: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   accessToken: string | null;
@@ -33,7 +33,6 @@ const getUserFromStorage = (): User | null => {
 };
 const initialState: AuthState = {
   user: getUserFromStorage(),
-  tenantId: localStorage.getItem('current_tenant'),
   isAuthenticated: !!localStorage.getItem('access_token')&& !!getUserFromStorage(),
   isLoading: false,
   accessToken: localStorage.getItem('access_token'),
@@ -47,19 +46,16 @@ const authSlice = createSlice({
     // ✅ Set credentials après login ou register
     setCredentials: (state, action: PayloadAction<{ 
       user: User;
-      tenantId: string;
       accessToken: string;
       refreshToken: string;
     }>) => {
-      const { user, tenantId, accessToken, refreshToken } = action.payload;
+      const { user, accessToken, refreshToken } = action.payload;
       
       state.user = user;
-      state.tenantId = tenantId;
       state.isAuthenticated = true;
       state.accessToken = accessToken;
       state.refreshToken = refreshToken;
       localStorage.setItem(USER_KEY, JSON.stringify(user));
-      localStorage.setItem('current_tenant', tenantId);
       localStorage.setItem('access_token', accessToken);
       localStorage.setItem('refresh_token', refreshToken);
     },
@@ -74,12 +70,10 @@ const authSlice = createSlice({
     // ✅ Déconnexion
     logout: (state) => {
       state.user = null;
-      state.tenantId = null;
       state.isAuthenticated = false;
       state.accessToken = null;
       state.refreshToken = null;
       localStorage.removeItem(USER_KEY);
-      localStorage.removeItem('current_tenant');
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');
     },
@@ -90,12 +84,6 @@ const authSlice = createSlice({
         state.user = { ...state.user, ...action.payload };
         localStorage.setItem(USER_KEY, JSON.stringify(state.user));
       }
-    },
-    
-    // ✅ Changer de tenant
-    setTenant: (state, action: PayloadAction<string>) => {
-      state.tenantId = action.payload;
-      localStorage.setItem('current_tenant', action.payload);
     },
     
     // ✅ Gestion du chargement
@@ -111,7 +99,6 @@ export const {
   updateAccessToken,
   logout, 
   updateUser, 
-  setTenant, 
   setLoading 
 } = authSlice.actions;
 
@@ -119,7 +106,6 @@ export const {
 export const removeTokens = (): void => {
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
-  localStorage.removeItem('current_tenant');
 };
 
 export default authSlice.reducer;

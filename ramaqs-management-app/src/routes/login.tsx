@@ -7,6 +7,7 @@ import { useAppDispatch } from "../store/store";
 import { setCredentials } from "../store/slices/authSlice";
 // En haut du fichier login.tsx, ajoutez l'import
 import { ChangePasswordModal } from "@/components/Users/ChangePasswordModal";
+
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
@@ -83,8 +84,6 @@ const handleSubmit = async (e: React.FormEvent) => {
       username: formData.email,
       password: formData.password,
     }).unwrap();
-     console.log("📥 Réponse login:", result);
-    
       // ✅ Vérifier que les données existent
     if (!result.access || !result.user) {
       throw new Error("Réponse invalide");
@@ -93,12 +92,6 @@ const handleSubmit = async (e: React.FormEvent) => {
     localStorage.setItem('access_token', result.access);
     localStorage.setItem('refresh_token', result.refresh);
     localStorage.setItem('user', JSON.stringify(result.user));
-
-     // ✅ Vérifier que le stockage a fonctionné
-    console.log("🔐 localStorage après stockage:", {
-      token: localStorage.getItem('access_token') ? "✅" : "❌",
-      user: localStorage.getItem('user') ? "✅" : "❌"
-    });
 
     // ✅ Si la réponse contient non_field_errors (compte en attente, etc.)
     if (result.non_field_errors && result.non_field_errors.length > 0) {
@@ -115,13 +108,9 @@ const handleSubmit = async (e: React.FormEvent) => {
     
     dispatch(setCredentials({
       user: result.user,
-      tenantId: result.tenant?.id,
       accessToken: result.access,
       refreshToken: result.refresh,
     }));
-    // Après dispatch(setCredentials)
-    console.log("✅ Connexion réussie, redirection vers /app");
-    console.log("🔐 state auth:", { user: result.user, accessToken: result.access });
     const roleRedirects: Record<string, string> = {
       consultant: "/app/taches",
       client:     "/app/documents",

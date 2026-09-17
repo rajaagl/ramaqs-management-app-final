@@ -8,14 +8,15 @@ import {
   Plus, Users, CheckCircle, Clock, BarChart3, Activity, Calendar,
   ArrowUp, ArrowDown, Eye, MoreHorizontal, ChevronRight, Bell
 } from "lucide-react";
-import { useGetDashboardStatsQuery, useGetProjetsQuery, useGetTachesQuery, useGetNotificationsQuery } from "../store/api/api";
+import { useGetProjetsQuery, useGetTachesQuery, useGetNotificationsQuery } from "../store/api/api";
 import { useAppSelector } from "../store/store";
 import type { Projet, Tache } from "../store/interfaces";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, Legend, BarChart, Bar, LineChart, Line
 } from "recharts";
-import { useState, useMemo, type ReactNode } from "react";
+import { useState, useMemo  } from "react";
+import type {ReactNode} from "react";
 import { ProtectedRoute } from "#/components/ui/ProtectedRoute";
 
 export const Route = createFileRoute("/app/")({
@@ -56,7 +57,6 @@ function Dashboard() {
   
   // Récupération des données
   
-  const { isLoading: statsLoading } = useGetDashboardStatsQuery();
   const { data: projetsData, isLoading: projetsLoading } = useGetProjetsQuery({ page: 1, pageSize: 100 });
   const { data: tachesData, isLoading: tachesLoading } = useGetTachesQuery({ page: 1, pageSize: 100 });
   const { data: notificationsData } = useGetNotificationsQuery({ page: 1, pageSize: 10 });
@@ -194,7 +194,7 @@ function Dashboard() {
     })
     .slice(0, 4), [projets]);
 
-  if (statsLoading || projetsLoading || tachesLoading) {
+  if (projetsLoading || tachesLoading) {
     return (
       <AppShell title="Tableau de bord" subtitle="Chargement...">
         <div className="flex items-center justify-center h-96">

@@ -4,7 +4,7 @@ import {
   Shield, Eye, Database, Lock, Cookie, FileText, 
   Mail, MapPin, Phone, CheckCircle, AlertCircle,
   ExternalLink, Printer, Download, Users, Clock,
-  Server, Key, Fingerprint, Bell
+  Server, Key, Fingerprint, Bell, Building2, Scale, Target
 } from "lucide-react";
 
 export const Route = createFileRoute("/confidentialite")({
@@ -273,6 +273,3 @@ function ConfidentialitePage() {
     </div>
   );
 }
-
-// Imports manquants
-import { Building2, Scale, Target } from "lucide-react";

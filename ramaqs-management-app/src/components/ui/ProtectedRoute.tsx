@@ -3,7 +3,6 @@
 import { Navigate, Link } from "@tanstack/react-router"; // ✅ FIX : import remonté en haut
 import { useAppSelector } from "../../store/store";
 import { Shield, AlertTriangle, Home, LogOut } from "lucide-react";
-import { useEffect, useState } from "react";
 
 // Types des rôles possibles dans l'application
 type UserRole = 'super_admin' | 'direction' | 'chef_projet' | 'consultant' | 'client' | 'partenaire';
@@ -14,7 +13,6 @@ interface ProtectedRouteProps {
   allowedRoles?: UserRole[];
   redirectTo?: string;
   requirePermission?: string;
-  showNotification?: boolean;
 }
 
 // Mapping des rôles vers des labels lisibles
@@ -32,20 +30,9 @@ export function ProtectedRoute({
   allowedRoles, 
   redirectTo = "/login",
   requirePermission,
-  showNotification = true
 }: ProtectedRouteProps) {
   
   const { user, isAuthenticated, accessToken } = useAppSelector((state) => state.auth);
-  const [showAccessDenied, setShowAccessDenied] = useState(false);
-  const [accessDeniedMessage, setAccessDeniedMessage] = useState("");
-
-  useEffect(() => {
-    if (showAccessDenied) {
-      const timer = setTimeout(() => setShowAccessDenied(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [showAccessDenied]);
-
   // ✅ FIX PRINCIPAL : comparaison EXACTE des rôles au lieu de la hiérarchie.
   //
   // Ancien comportement (BUG) :
@@ -68,12 +55,8 @@ export function ProtectedRoute({
     return allowedRoles.includes(userRole);
   };
 
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-  const isOnUnauthorizedPage = currentPath === "/unauthorized";
-
   // ── 1. Utilisateur non authentifié → /login ──────────────────────────────
   if (!isAuthenticated || !accessToken || !user) {
-    console.log("🔒 Accès refusé : utilisateur non authentifié");
     return <Navigate to={redirectTo} />;
   }
 
@@ -81,54 +64,18 @@ export function ProtectedRoute({
   if (requirePermission) {
     const userPermissions = (user as any).permissions || [];
     if (!userPermissions.includes(requirePermission)) {
-      if (showNotification && !isOnUnauthorizedPage) {
-        setAccessDeniedMessage(`Permission "${requirePermission}" requise`);
-        setShowAccessDenied(true);
-      }
       return <Navigate to="/unauthorized" />;
     }
   }
 
   // ── 3. Rôle non autorisé → /unauthorized ─────────────────────────────────
   if (!hasRequiredRole()) {
-    if (showNotification && !isOnUnauthorizedPage) {
-      const requiredRolesLabels = allowedRoles?.map(r => roleLabels[r]).join(", ") || "un rôle spécifique";
-      setAccessDeniedMessage(
-        `Accès réservé à : ${requiredRolesLabels}. Votre rôle : ${roleLabels[user.role as UserRole] || user.role}`
-      );
-      setShowAccessDenied(true);
-    }
     return <Navigate to="/unauthorized" />;
   }
 
   // ── Accès autorisé ────────────────────────────────────────────────────────
   return (
-    <>
-      {showAccessDenied && (
-        <div className="fixed top-24 right-4 z-50 animate-in slide-in-from-top-2 fade-in duration-300">
-          <div className="rounded-xl bg-red-50 border-l-4 border-red-500 shadow-2xl p-4 max-w-md">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0">
-                <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
-                  <Shield className="h-4 w-4 text-red-600" />
-                </div>
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-red-800">Accès refusé</p>
-                <p className="text-sm text-red-600 mt-0.5">{accessDeniedMessage}</p>
-              </div>
-              <button 
-                onClick={() => setShowAccessDenied(false)}
-                className="text-red-400 hover:text-red-600 transition"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {children}
-    </>
+    <>{children}</>
   );
 }
 

@@ -1,99 +1,70 @@
-from rest_framework import permissions
-from .models import RoleChoices
-
-class IsTenantAuthenticated(permissions.BasePermission):
-    """Vérifie que la requête a un tenant valide"""
-    
-    def has_permission(self, request, _view):
-        return hasattr(request, 'tenant') and request.tenant is not None
+from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 
-class IsTenantMember(permissions.BasePermission):
-    """Vérifie que l'utilisateur est membre du tenant"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
+def is_direction(user):
+    return bool(
+        user
+        and user.is_authenticated
+        and user.is_active
+        and getattr(user, 'statut_approbation', 'approved') == 'approved'
+        and not getattr(user, 'doit_changer_mot_de_passe', False)
+        and (user.is_superuser or user.role in {'super_admin', 'direction'})
+    )
+
+
+def has_application_access(user):
+    """A JWT alone is insufficient: the account must remain eligible."""
+    return bool(
+        user
+        and user.is_authenticated
+        and user.is_active
+        and getattr(user, 'statut_approbation', 'approved') == 'approved'
+        and not getattr(user, 'doit_changer_mot_de_passe', False)
+    )
+
+
+class IsEligibleUser(BasePermission):
+    """Blocks normal API access until an account is approved and its password is changed."""
+
+    def has_permission(self, request, view):
+        return has_application_access(request.user)
+
+
+class IsDirectionUser(BasePermission):
+    """Accès réservé à la direction et aux super-administrateurs."""
+
+    def has_permission(self, request, view):
+        return is_direction(request.user)
+
+
+class IsProjectMemberReadOnly(BasePermission):
+    """Lecture pour les membres d'un projet ; écriture à la direction."""
+
+    def has_permission(self, request, view):
+        return has_application_access(request.user)
+
+    def has_object_permission(self, request, view, obj):
+        if is_direction(request.user):
+            return True
+        if request.method not in SAFE_METHODS:
             return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role is not None
+        return (
+            obj.client_id == request.user.id
+            or obj.chef_projet.filter(id=request.user.id).exists()
+            or obj.partenaires.filter(id=request.user.id).exists()
+            or obj.taches.filter(consultant_id=request.user.id).exists()
+        )
 
 
-class IsTenantAdmin(permissions.BasePermission):
-    """Vérifie que l'utilisateur est admin du tenant (Super Admin ou Direction)"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
-            return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role in [RoleChoices.SUPER_ADMIN, RoleChoices.DIRECTION]
+class IsTaskMember(BasePermission):
+    """Direction/chef du projet gèrent la tâche ; consultant limité à la sienne."""
 
+    def has_permission(self, request, view):
+        return has_application_access(request.user)
 
-class IsSuperAdmin(permissions.BasePermission):
-    """Vérifie que l'utilisateur est Super Admin"""
-    
-    def has_permission(self, request, _view):
-        return request.user.is_authenticated and request.user.is_super_admin()
-
-
-class IsDirection(permissions.BasePermission):
-    """Vérifie que l'utilisateur est Direction RAMAQS"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
-            return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role == RoleChoices.DIRECTION
-
-
-class IsChefProjet(permissions.BasePermission):
-    """Vérifie que l'utilisateur est Chef de projet"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
-            return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role == RoleChoices.CHEF_PROJET
-
-
-class IsConsultant(permissions.BasePermission):
-    """Vérifie que l'utilisateur est Consultant"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
-            return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role == RoleChoices.CONSULTANT
-
-
-class IsClient(permissions.BasePermission):
-    """Vérifie que l'utilisateur est Client"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
-            return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role == RoleChoices.CLIENT
-
-
-class IsPartenaire(permissions.BasePermission):
-    """Vérifie que l'utilisateur est Partenaire"""
-    
-    def has_permission(self, request, _view):
-        if not hasattr(request, 'tenant') or not request.tenant:
-            return False
-        if not request.user.is_authenticated:
-            return False
-        role = request.user.get_role_in_tenant(request.tenant)
-        return role == RoleChoices.PARTENAIRE
+    def has_object_permission(self, request, view, obj):
+        if is_direction(request.user):
+            return True
+        if obj.projet.chef_projet.filter(id=request.user.id).exists():
+            return True
+        return request.method in SAFE_METHODS or obj.consultant_id == request.user.id

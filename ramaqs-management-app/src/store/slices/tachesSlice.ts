@@ -1,5 +1,6 @@
 // src/store/slices/tachesSlice.ts
-import { createSlice,type  PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
+import type {PayloadAction} from '@reduxjs/toolkit';
 
 interface TachesState {
   selectedTask: any | null;

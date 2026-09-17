@@ -1,9 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 import uuid
-from .managers import TenantManager
 from django.utils import timezone
-from .utils import get_current_tenant
 
 # ========== MANAGERS PERSONNALISÉS POUR PROXY MODELS ==========
 class ClientManager(models.Manager):
@@ -52,42 +50,6 @@ class RoleChoices(models.TextChoices):
     PARTENAIRE = 'partenaire', 'Partenaire'
 
 
-# ========== TENANT ==========
-
-class Tenant(models.Model):
-    """Tenant = Espace client (entreprise cliente)"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    nom = models.CharField(max_length=255)
-    slug = models.SlugField(unique=True, max_length=100)
-    secteur_activite = models.CharField(max_length=100, blank=True, null=True)
-    logo = models.URLField(blank=True, null=True)
-    date_creation = models.DateTimeField(auto_now_add=True)
-    actif = models.BooleanField(default=True)
-    
-    class Meta:
-        db_table = 'tenants'
-    
-    def __str__(self):
-        return self.nom
-
-
-class TenantMembership(models.Model):
-    """Relation User - Tenant avec rôle spécifique"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey('Utilisateur', on_delete=models.CASCADE, related_name='memberships')
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='memberships')
-    role = models.CharField(max_length=20, choices=RoleChoices.choices)
-    date_joined = models.DateTimeField(auto_now_add=True)
-    invite_par = models.ForeignKey('Utilisateur', on_delete=models.SET_NULL, null=True, blank=True, related_name='invitations')
-    
-    class Meta:
-        db_table = 'tenant_memberships'
-        unique_together = [['user', 'tenant']]
-    
-    def __str__(self):
-        return f"{self.user.email} - {self.tenant.nom} ({self.role})"
-
-
 # ========== UTILISATEUR ==========
 
 class Utilisateur(AbstractUser):
@@ -102,6 +64,7 @@ class Utilisateur(AbstractUser):
     entreprise = models.CharField(max_length=100, blank=True, null=True)
     poste = models.CharField(max_length=100, blank=True, null=True)
     ROLE_CHOICES = [
+        ('super_admin', 'Super Administrateur RAMAQS'),
         ('direction', 'Direction'),
         ('chef_projet', 'Chef de projet'),
         ('consultant', 'Consultant'),
@@ -130,31 +93,8 @@ class Utilisateur(AbstractUser):
     def __str__(self):
         return self.email
     
-    def get_role_in_tenant(self, tenant):
-        try:
-            membership = self.memberships.get(tenant=tenant)
-            return membership.role
-        except TenantMembership.DoesNotExist:
-            return None
-    
-    def has_permission(self, tenant, required_role):
-        role = self.get_role_in_tenant(tenant)
-        if not role:
-            return False
-        
-        hierarchy = {
-            RoleChoices.SUPER_ADMIN: 6,
-            RoleChoices.DIRECTION: 5,
-            RoleChoices.CHEF_PROJET: 4,
-            RoleChoices.CONSULTANT: 3,
-            RoleChoices.PARTENAIRE: 2,
-            RoleChoices.CLIENT: 1,
-        }
-        
-        return hierarchy.get(role, 0) >= hierarchy.get(required_role, 0)
-    
     def is_super_admin(self):
-        return self.is_superuser or self.memberships.filter(role=RoleChoices.SUPER_ADMIN).exists()
+        return self.is_superuser or self.role == RoleChoices.SUPER_ADMIN
     
     # Pour la gestion des clients
     statut_approbation = models.CharField(
@@ -234,7 +174,6 @@ class Partenaire(Utilisateur):
 
 class Projet(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='projets')
     nom = models.CharField(max_length=100)
     description = models.TextField()
     objectsif = models.CharField(max_length=100)
@@ -250,21 +189,14 @@ class Projet(models.Model):
     domaine = models.CharField(max_length=100)
     priorite = models.CharField(max_length=50)
     
-    objects = TenantManager()
-    
     class Meta:
         db_table = 'projets'
-        indexes = [
-            models.Index(fields=['tenant', 'statut']),
-            models.Index(fields=['tenant', 'date_debut']),
-        ]
     
     def __str__(self):
-        return f"{self.nom} - {self.tenant.nom}"
+        return self.nom
 #------------------------------------------------tache-------------------------------------------------------------
 class Tache(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     titre = models.CharField(max_length=100)
     description = models.TextField()
     priorite = models.CharField(max_length=50)
@@ -280,16 +212,11 @@ class Tache(models.Model):
         ('termine', 'Terminé'),
     ]
     statut = models.CharField(max_length=50, choices=STATUT_CHOICES, default='a_faire')
-    objects = TenantManager()
     projet = models.ForeignKey(Projet, on_delete=models.CASCADE, related_name='taches')
     consultant = models.ForeignKey(Utilisateur, on_delete=models.CASCADE, related_name='taches')
     
     class Meta:
         db_table = 'taches'
-        indexes = [
-            models.Index(fields=['tenant', 'statut']),
-            models.Index(fields=['tenant', 'consultant']),
-        ]
     
     def __str__(self):
         return self.titre
@@ -339,14 +266,12 @@ class Tache(models.Model):
     
 class SousTache(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     titre = models.CharField(max_length=100)
     statut = models.CharField(max_length=50)
     avancement = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     date_echeance = models.DateField()
     tache = models.ForeignKey(Tache, on_delete=models.CASCADE, related_name='sous_taches')
     
-    objects = TenantManager()
     
     class Meta:
         db_table = 'sous_taches'
@@ -357,13 +282,11 @@ class SousTache(models.Model):
 
 class Commentaire(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     contenu = models.TextField()
     date_publication = models.DateTimeField(auto_now_add=True)
     utilisateur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE)
     tache = models.ForeignKey(Tache, on_delete=models.CASCADE, related_name='commentaires')
     
-    objects = TenantManager()
     
     class Meta:
         db_table = 'commentaires'
@@ -413,14 +336,12 @@ class Document(models.Model):
 
 class Ressource(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     type = models.CharField(max_length=50)
     nom = models.CharField(max_length=100)
     cout_unitaire = models.DecimalField(max_digits=10, decimal_places=2)
     disponible = models.BooleanField(default=True)
     projet = models.ManyToManyField(Projet, related_name='ressources')
     
-    objects = TenantManager()
     
     class Meta:
         db_table = 'ressources'
@@ -438,7 +359,6 @@ class Notification(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='info')
     titre = models.CharField(max_length=200)
     message = models.CharField(max_length=200)
@@ -451,13 +371,12 @@ class Notification(models.Model):
     entite_type = models.CharField(max_length=50, blank=True, null=True)  # Type d'entité ('tache', 'projet')
     # models.py - Ajouter dans Notification
     projet = models.ForeignKey('Projet', on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
-    objects = TenantManager()
     
     class Meta:
         db_table = 'notifications'
         indexes = [
-            models.Index(fields=['tenant', 'utilisateur', 'lue']),
-            models.Index(fields=['tenant', 'utilisateur', '-date_envoi']),
+            models.Index(fields=['utilisateur', 'lue']),
+            models.Index(fields=['utilisateur', '-date_envoi']),
         ]
         ordering = ['-date_envoi']
     
@@ -468,10 +387,7 @@ class Notification(models.Model):
     def creer_notification(cls, utilisateur, titre, message, type_notif='info', lien_action=None, entite_id=None, entite_type=None):
         """Méthode utilitaire pour créer une notification"""
         
-        tenant = get_current_tenant()
-        
         return cls.objects.create(
-            tenant=tenant,
             utilisateur=utilisateur,
             titre=titre,
             message=message,
@@ -483,7 +399,6 @@ class Notification(models.Model):
 
 class Kpi(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     nom = models.CharField(max_length=50)
     valeur_cible = models.FloatField()
     valeur_actuelle = models.FloatField()
@@ -491,7 +406,6 @@ class Kpi(models.Model):
     seuil_alerte = models.FloatField()
     projet = models.ForeignKey(Projet, on_delete=models.CASCADE, related_name='kpis')
     
-    objects = TenantManager()
     
     class Meta:
         db_table = 'kpis'
@@ -500,55 +414,14 @@ class Kpi(models.Model):
         return self.nom
 
 
-class Conversation(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
-    titre = models.CharField(max_length=255)
-    date_creation = models.DateTimeField(auto_now_add=True)
-    date_dernier_message = models.DateTimeField(auto_now=True)
-    projet = models.ForeignKey(Projet, on_delete=models.CASCADE, related_name='conversations')
-    
-    objects = TenantManager()
-    
-    class Meta:
-        db_table = 'conversations'
-    
-    def __str__(self):
-        return self.titre
-
-
-class Message(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
-    contenu = models.TextField()
-    date_envoi = models.DateTimeField(auto_now_add=True)
-    lu = models.BooleanField(default=False)
-    type_message = models.CharField(max_length=50, default='texte')
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
-    expediteur = models.ForeignKey(Utilisateur, on_delete=models.CASCADE, related_name='messages_envoyes')
-    
-    objects = TenantManager()
-    
-    class Meta:
-        db_table = 'messages'
-        indexes = [
-            models.Index(fields=['tenant', 'conversation', 'date_envoi']),
-        ]
-    
-    def __str__(self):
-        return f"Message de {self.expediteur.nom}"
-
-
 class Budget(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     montant_total = models.FloatField()
     montant_depense = models.FloatField()
     montant_restant = models.FloatField()
     devise = models.CharField(max_length=10, default='EUR')
     projet = models.ForeignKey(Projet, on_delete=models.CASCADE, related_name='budgets')
     
-    objects = TenantManager()
     
     class Meta:
         db_table = 'budgets'

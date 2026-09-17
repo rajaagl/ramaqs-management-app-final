@@ -1,5 +1,6 @@
 // src/store/slices/consultantsSlice.ts
-import { createSlice,type PayloadAction } from '@reduxjs/toolkit';
+import { createSlice } from '@reduxjs/toolkit';
+import type {PayloadAction} from '@reduxjs/toolkit';
 
 interface ConsultantsState {
   selectedConsultant: any | null;

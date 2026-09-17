@@ -30,12 +30,8 @@ import { Route as AppProfilRouteImport } from './routes/app.profil'
 import { Route as AppPartenairesRouteImport } from './routes/app.partenaires'
 import { Route as AppParametresRouteImport } from './routes/app.parametres'
 import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
-import { Route as AppMessagerieRouteImport } from './routes/app.messagerie'
-import { Route as AppIaRouteImport } from './routes/app.ia'
-import { Route as AppFinanceRouteImport } from './routes/app.finance'
 import { Route as AppDocumentsRouteImport } from './routes/app.documents'
 import { Route as AppClientRouteImport } from './routes/app.client'
-import { Route as AppCalendrierRouteImport } from './routes/app.calendrier'
 import { Route as AppTachesAddRouteImport } from './routes/app.taches/add'
 
 const UnauthorizedRoute = UnauthorizedRouteImport.update({
@@ -143,21 +139,6 @@ const AppNotificationsRoute = AppNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => AppRoute,
 } as any)
-const AppMessagerieRoute = AppMessagerieRouteImport.update({
-  id: '/messagerie',
-  path: '/messagerie',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppIaRoute = AppIaRouteImport.update({
-  id: '/ia',
-  path: '/ia',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppFinanceRoute = AppFinanceRouteImport.update({
-  id: '/finance',
-  path: '/finance',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppDocumentsRoute = AppDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
@@ -166,11 +147,6 @@ const AppDocumentsRoute = AppDocumentsRouteImport.update({
 const AppClientRoute = AppClientRouteImport.update({
   id: '/client',
   path: '/client',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCalendrierRoute = AppCalendrierRouteImport.update({
-  id: '/calendrier',
-  path: '/calendrier',
   getParentRoute: () => AppRoute,
 } as any)
 const AppTachesAddRoute = AppTachesAddRouteImport.update({
@@ -190,12 +166,8 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/test-api': typeof TestApiRoute
   '/unauthorized': typeof UnauthorizedRoute
-  '/app/calendrier': typeof AppCalendrierRoute
   '/app/client': typeof AppClientRoute
   '/app/documents': typeof AppDocumentsRoute
-  '/app/finance': typeof AppFinanceRoute
-  '/app/ia': typeof AppIaRoute
-  '/app/messagerie': typeof AppMessagerieRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/parametres': typeof AppParametresRoute
   '/app/partenaires': typeof AppPartenairesRoute
@@ -219,12 +191,8 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/test-api': typeof TestApiRoute
   '/unauthorized': typeof UnauthorizedRoute
-  '/app/calendrier': typeof AppCalendrierRoute
   '/app/client': typeof AppClientRoute
   '/app/documents': typeof AppDocumentsRoute
-  '/app/finance': typeof AppFinanceRoute
-  '/app/ia': typeof AppIaRoute
-  '/app/messagerie': typeof AppMessagerieRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/parametres': typeof AppParametresRoute
   '/app/partenaires': typeof AppPartenairesRoute
@@ -250,12 +218,8 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/test-api': typeof TestApiRoute
   '/unauthorized': typeof UnauthorizedRoute
-  '/app/calendrier': typeof AppCalendrierRoute
   '/app/client': typeof AppClientRoute
   '/app/documents': typeof AppDocumentsRoute
-  '/app/finance': typeof AppFinanceRoute
-  '/app/ia': typeof AppIaRoute
-  '/app/messagerie': typeof AppMessagerieRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/parametres': typeof AppParametresRoute
   '/app/partenaires': typeof AppPartenairesRoute
@@ -282,12 +246,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/test-api'
     | '/unauthorized'
-    | '/app/calendrier'
     | '/app/client'
     | '/app/documents'
-    | '/app/finance'
-    | '/app/ia'
-    | '/app/messagerie'
     | '/app/notifications'
     | '/app/parametres'
     | '/app/partenaires'
@@ -311,12 +271,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/test-api'
     | '/unauthorized'
-    | '/app/calendrier'
     | '/app/client'
     | '/app/documents'
-    | '/app/finance'
-    | '/app/ia'
-    | '/app/messagerie'
     | '/app/notifications'
     | '/app/parametres'
     | '/app/partenaires'
@@ -341,12 +297,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/test-api'
     | '/unauthorized'
-    | '/app/calendrier'
     | '/app/client'
     | '/app/documents'
-    | '/app/finance'
-    | '/app/ia'
-    | '/app/messagerie'
     | '/app/notifications'
     | '/app/parametres'
     | '/app/partenaires'
@@ -523,27 +475,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNotificationsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/messagerie': {
-      id: '/app/messagerie'
-      path: '/messagerie'
-      fullPath: '/app/messagerie'
-      preLoaderRoute: typeof AppMessagerieRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/ia': {
-      id: '/app/ia'
-      path: '/ia'
-      fullPath: '/app/ia'
-      preLoaderRoute: typeof AppIaRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/finance': {
-      id: '/app/finance'
-      path: '/finance'
-      fullPath: '/app/finance'
-      preLoaderRoute: typeof AppFinanceRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/app/documents': {
       id: '/app/documents'
       path: '/documents'
@@ -556,13 +487,6 @@ declare module '@tanstack/react-router' {
       path: '/client'
       fullPath: '/app/client'
       preLoaderRoute: typeof AppClientRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/calendrier': {
-      id: '/app/calendrier'
-      path: '/calendrier'
-      fullPath: '/app/calendrier'
-      preLoaderRoute: typeof AppCalendrierRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/taches/add': {
@@ -588,12 +512,8 @@ const AppTachesRouteWithChildren = AppTachesRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
-  AppCalendrierRoute: typeof AppCalendrierRoute
   AppClientRoute: typeof AppClientRoute
   AppDocumentsRoute: typeof AppDocumentsRoute
-  AppFinanceRoute: typeof AppFinanceRoute
-  AppIaRoute: typeof AppIaRoute
-  AppMessagerieRoute: typeof AppMessagerieRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppParametresRoute: typeof AppParametresRoute
   AppPartenairesRoute: typeof AppPartenairesRoute
@@ -608,12 +528,8 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppCalendrierRoute: AppCalendrierRoute,
   AppClientRoute: AppClientRoute,
   AppDocumentsRoute: AppDocumentsRoute,
-  AppFinanceRoute: AppFinanceRoute,
-  AppIaRoute: AppIaRoute,
-  AppMessagerieRoute: AppMessagerieRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppParametresRoute: AppParametresRoute,
   AppPartenairesRoute: AppPartenairesRoute,

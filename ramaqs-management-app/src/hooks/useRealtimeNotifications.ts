@@ -1,10 +1,10 @@
 // src/hooks/useRealtimeNotifications.ts
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState  } from 'react';
 import { useDispatch } from 'react-redux';
 import { useAppSelector } from '../store/store';
 import { api } from '../store/api/api';
-import { useState } from 'react';
+import { WS_BASE_URL } from '../config/endpoints';
 
 
 
@@ -66,7 +66,7 @@ function playChime() {
   }
 }
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+const WS_URL = WS_BASE_URL;
 
 export function useRealtimeNotifications() {
   
@@ -120,10 +120,10 @@ export function useRealtimeNotifications() {
         return;
       }
 
-      const wsUrl = `${WS_URL}/ws/notifications/?token=${token}`;
+      const wsUrl = `${WS_URL}/ws/notifications/`;
       
       try {
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(wsUrl, ['access-token', token]);
         wsRef.current = ws;
 
         ws.onopen = () => {

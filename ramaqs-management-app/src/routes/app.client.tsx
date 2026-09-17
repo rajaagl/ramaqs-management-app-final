@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, Award, CreditCard,
   Globe, Linkedin, Twitter, CheckCircle, XCircle,
   Clock, DollarSign, PieChart, ArrowUpRight,
-  ArrowDownRight, Eye, MessageSquare, CalendarDays,
+  ArrowDownRight, Eye, CalendarDays,
   AlertTriangle
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -323,9 +323,6 @@ function ClientsPage() {
                 <div className="mt-4 flex gap-2">
                   <button className="flex-1 inline-flex items-center justify-center gap-2 h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition">
                     <Eye className="h-4 w-4" /> Détails
-                  </button>
-                  <button className="inline-flex items-center justify-center gap-2 h-9 w-9 rounded-lg border border-border hover:bg-muted transition">
-                    <MessageSquare className="h-4 w-4" />
                   </button>
                   <button 
                     onClick={() => {

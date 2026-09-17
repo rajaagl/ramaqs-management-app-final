@@ -4,7 +4,7 @@ import {
   Users, Sparkles, Plus, Briefcase, TrendingUp, Search, Filter,
   Calendar, Clock, Award, Mail, Phone, MapPin, Star, 
   ChevronRight, Download, X, Loader2, UserPlus, Edit, Trash2,
-  Eye, BarChart3, PieChart as PieChartIcon
+  Eye, BarChart3, PieChart as PieChartIcon, AlertCircle
 } from "lucide-react";
 import { useState } from "react";
 import { useGetRessourcesQuery, useDeleteRessourceMutation } from "../store/api/api";
@@ -471,6 +471,3 @@ function RessourcesPage() {
     </AppShell>
   );
 }
-
-// Import manquant
-import { AlertCircle } from "lucide-react";

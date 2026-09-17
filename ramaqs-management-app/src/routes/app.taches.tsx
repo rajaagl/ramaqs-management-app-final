@@ -22,11 +22,12 @@ import {
 import type { DragStartEvent, DragEndEvent } from "@dnd-kit/core";
 import type { Tache, Projet } from "../store/interfaces";
 
-type TaskStatus = "a_faire" | "en_cours" | "termine";
+type TaskStatus = "a_faire" | "en_cours" | "en_attente_validation" | "termine";
 
 const COLUMNS = [
   { id: "a_faire"  as TaskStatus, label: "À faire",  dotColor: "bg-slate-400",   borderColor: "border-slate-200",   headerBg: "bg-slate-50"   },
   { id: "en_cours" as TaskStatus, label: "En cours", dotColor: "bg-amber-400",   borderColor: "border-amber-200",   headerBg: "bg-amber-50"   },
+  { id: "en_attente_validation" as TaskStatus, label: "À valider", dotColor: "bg-violet-400", borderColor: "border-violet-200", headerBg: "bg-violet-50" },
   { id: "termine"  as TaskStatus, label: "Terminé",  dotColor: "bg-emerald-500", borderColor: "border-emerald-200", headerBg: "bg-emerald-50" },
 ];
 
@@ -46,7 +47,6 @@ function buildTransitionPayload(task: Tache, newStatus: TaskStatus): Record<stri
   switch (newStatus) {
     case "a_faire":
       payload.avancement     = 0;
-      payload.date_debut     = null;
       payload.date_fin_reelle = null;
       break;
 
@@ -150,10 +150,6 @@ function TachesPage() {
     if (!user) return false;
     if (user.role === "direction" ) return true;
     if (user.role === "chef_projet") return myProjectIds.includes(task.projetId);
-    // consultant : seulement ses propres tâches
-    if (user.role === "consultant") {
-      return task.assigneA === user.id || task.assigneNom === user.nom;
-    }
     return false;
   }, [user, myProjectIds]);
 
@@ -188,6 +184,7 @@ function TachesPage() {
   const grouped: Record<TaskStatus, Tache[]> = {
     a_faire:  filteredTasks.filter(t => t.status === "a_faire"),
     en_cours: filteredTasks.filter(t => t.status === "en_cours"),
+    en_attente_validation: filteredTasks.filter(t => t.status === "en_attente_validation"),
     termine:  filteredTasks.filter(t => t.status === "termine"),
   };
 
@@ -223,7 +220,7 @@ function TachesPage() {
       const data = buildTransitionPayload(task, newStatus as TaskStatus);
 
       await patchTache({ id: task.id, data }).unwrap();
-      showToast(transitionMessage(task.status as TaskStatus, newStatus as TaskStatus));
+      showToast(transitionMessage(task.status, newStatus as TaskStatus));
       await refetch();
     } catch (err) {
       showToast("Erreur lors de la mise à jour", false);
@@ -266,7 +263,7 @@ function TachesPage() {
     if (!over) return;
 
     const targetStatus = over.id as string;
-    if (!["a_faire", "en_cours", "termine"].includes(targetStatus)) return;
+    if (!["a_faire", "en_cours", "en_attente_validation", "termine"].includes(targetStatus)) return;
 
     const task = allTasks.find(t => t.id === active.id);
     if (!task || task.status === targetStatus) return;
@@ -283,6 +280,7 @@ function TachesPage() {
     { label: "Total",          value: filteredTasks.length,    bg: "bg-white",      text: "text-gray-800"    },
     { label: "À faire",        value: grouped.a_faire.length,  bg: "bg-slate-50",   text: "text-slate-600"   },
     { label: "En cours",       value: grouped.en_cours.length, bg: "bg-amber-50",   text: "text-amber-600"   },
+    { label: "À valider",      value: grouped.en_attente_validation.length, bg: "bg-violet-50", text: "text-violet-600" },
     { label: "Terminés",       value: grouped.termine.length,  bg: "bg-emerald-50", text: "text-emerald-600" },
   ];
 

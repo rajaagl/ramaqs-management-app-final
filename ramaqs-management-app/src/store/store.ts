@@ -1,7 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { api } from './api/api';
 
-import { useSelector, useDispatch, type TypedUseSelectorHook } from 'react-redux';
+import { useSelector, useDispatch  } from 'react-redux';
+import type {TypedUseSelectorHook} from 'react-redux';
 import {
   authReducer,
   projectsReducer,
@@ -14,8 +15,6 @@ import {
   documentsReducer,
   commentairesReducer,
   notificationsReducer,
-  conversationsReducer,
-  messagesReducer,
   budgetsReducer,
   kpisReducer,
 } from './slices';
@@ -36,8 +35,6 @@ export const store = configureStore({
     documents: documentsReducer,
     commentaires: commentairesReducer,
     notifications: notificationsReducer,
-    conversations: conversationsReducer,
-    messages: messagesReducer,
     budgets: budgetsReducer,
     kpis: kpisReducer,
   },

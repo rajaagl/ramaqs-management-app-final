@@ -1,1 +1,21 @@
-drf-yasg
+# Runtime Django
+Django>=5.1,<6.0
+djangorestframework>=3.15,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+django-cors-headers>=4.4,<5.0
+django-filter>=24.3,<26.0
+drf-yasg>=1.21.7,<2.0
+python-dotenv>=1.0,<2.0
+
+# ASGI / notifications temps réel
+daphne>=4.1,<5.0
+channels>=4.1,<5.0
+channels-redis>=4.2,<5.0
+
+# Stockage et traitement des fichiers
+Pillow>=10.4,<12.0
+openpyxl>=3.1,<4.0
+
+# Services externes et base PostgreSQL
+psycopg[binary]>=3.2,<4.0
+requests>=2.32,<3.0

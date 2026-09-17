@@ -1,8 +1,9 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
-  type ProjectStatus, type Priority, type TaskStatus,
-  statusLabels, priorityLabels, taskStatusLabels,
+    
+  statusLabels, priorityLabels, taskStatusLabels
 } from "@/lib/mock-data";
+import type {ProjectStatus, Priority, TaskStatus} from "@/lib/mock-data";
 
 export function StatCard({
   label, value, sublabel, trend, icon, accent = "primary",

@@ -7,7 +7,6 @@ export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 export type SousTacheStatus = "a_faire" | "en_cours" | "termine";
 export type RiskLevel = "faible" | "moyen" | "eleve" | "critique";
 export type NotificationType = "info" | "succes" | "attention" | "erreur";
-export type MessageType = "texte" | "image" | "fichier" | "alerte";
 export type DocumentType = "pdf" | "docx" | "xlsx" | "pptx" | "image";
 
 // Types de rôles possibles
@@ -184,11 +183,11 @@ export interface Projet {
   code: string;
   health: "sain" | "vigilant" | "critique";
   team: { id: UUID; name: string; role: string }[];
-  spent: number; //budjet consommé
-  progress: number; //avancement en pourcentage
+  spent: number; // budjet consommé
+  progress: number; // avancement en pourcentage
   domain: string;
 
-  //(clés étrangères)
+  // (clés étrangères)
   chefProjetId: UUID;
   clientId: UUID;
   partenaireIds?: UUID[];
@@ -218,7 +217,7 @@ export interface Tache {
   projetId: string;           // Clé étrangère vers Projet
   title: string;              // Titre de la tâche
   description?: string;       // Description optionnelle
-  status: 'a_faire' | 'en_cours' | 'termine';  // Statut de la tâche
+  status: 'a_faire' | 'en_cours' | 'en_attente_validation' | 'termine';
   avancement: number;         // Pourcentage d'avancement (0-100)
   dateEcheance: string;       // Date d'échéance (YYYY-MM-DD)
   assigneA?: string;          // ID de la personne assignée (optionnel)
@@ -262,7 +261,7 @@ export interface KPI {
   projetId?: UUID;
   periode: 'jour' | 'semaine' | 'mois' | 'trimestre' | 'annee';
 }
-//---------------------------------------------------doc--------------------------------------
+// ---------------------------------------------------doc--------------------------------------
 // store/interfaces.ts
 export interface Document {
   id: string;
@@ -279,26 +278,6 @@ export interface Document {
   uploadAt: string;
 }
 
-export interface Conversation {
-  id: UUID;
-  titre: string;
-  projetId?: UUID;            
-  createdAt: Date;
-  createdBy: UUID;
-  participants: UUID[];       
-  lastMessageAt: Date;
-  estArchive: boolean;
-}
-export interface Message {
-  id: UUID;
-  conversationId: UUID;
-  expediteurId: UUID;
-  contenu: string;
-  dateEnvoi: Date;
-  lu: boolean;                
-  typeMessage: MessageType;
-  pieceJointe?: string;       
-}
 // -------------------------------interface notification------------------------------------------------
 export interface Notification {
   id: UUID;
@@ -306,7 +285,7 @@ export interface Notification {
   titre: string;
   message: string;
   lu: boolean;               
-  dateEnvoi: String;
+  dateEnvoi: string;
   destinataireId: UUID;
   lienAction?: string;  
   // ✅ AJOUTER CES CHAMPS
