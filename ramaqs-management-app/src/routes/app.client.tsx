@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { formatCurrency } from "@/lib/mock-data";
 import { 
@@ -17,6 +17,9 @@ import { useGetClientsQuery, useDeleteClientMutation } from "../store/api/api";
 import type { Client } from "../store/interfaces";
 
 export const Route = createFileRoute("/app/client")({
+  beforeLoad: () => {
+    throw redirect({ to: "/app/users" });
+  },
   component: ClientsPage,
 });
 
@@ -94,8 +97,7 @@ function ClientsPage() {
       setShowDeleteConfirm(false);
       setSelectedClient(null);
       refetch();
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
+    } catch {
     }
   };
 

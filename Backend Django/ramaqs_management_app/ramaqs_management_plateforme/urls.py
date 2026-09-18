@@ -35,12 +35,11 @@ router.register('clients', views.ClientViewSet)
 router.register('chefProjets', views.ChefProjetViewSet)
 router.register('directions', views.DirectionViewSet)
 router.register('partenaires', views.PartenaireViewSet)
-router.register('ressources', views.RessourceViewSet)
+# Les modules Ressources, KPI et Finance ne font pas partie de cette livraison.
+# Ils restent volontairement hors de l'API publique jusqu'à leur recette complète.
 router.register('sousTaches', views.SousTacheViewSet)
 router.register('documents', views.DocumentViewSet, basename='document')
 router.register('commentaires', views.CommentaireViewSet)
-router.register('kpis', views.KpiViewSet)
-router.register('budgets', views.BudgetViewSet)
 router.register('utilisateurs', views.UtilisateurViewSet, basename='utilisateur')
 router.register('notifications', views.NotificationViewSet, basename='notification')
 # Si vous avez un ViewSet pour les chefs de projet

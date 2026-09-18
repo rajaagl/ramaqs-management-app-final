@@ -6,18 +6,18 @@ Utiliser cinq comptes approuvés : direction, chef de projet, consultant, client
 
 | Statut | ID | Action | Résultat attendu |
 |---|---|---|---|
-| ☐ | INS-01 | Inscrire un consultant avec mot de passe fort. | Compte `pending`, connexion refusée avant approbation. |
-| ☐ | INS-02 | Inscrire à nouveau le même email. | Refus et aucun doublon. |
+| ☐ | INS-01 | Inscrire un consultant avec mot de passe fort. | Compte `pending`, connexion refusée avant approbation. |  bien 
+| ☐ | INS-02 | Inscrire à nouveau le même email. | Refus et aucun doublon. |bien 
 | ☐ | INS-03 | Utiliser `123456` comme mot de passe. | Refus. |
 | ☐ | INS-04 | Forcer le rôle `direction` dans la requête. | Refus. |
-| ☐ | INS-05 | Direction approuve/refuse le compte. | Approbation : connexion possible ; refus : connexion impossible. |
+| ☐ | INS-05 | Direction approuve/refuse le compte. | Approbation : connexion possible ; refus : connexion impossible. |bien
 
 ## Connexion et JWT
 
 | Statut | ID | Action | Résultat attendu |
 |---|---|---|---|
 | ☐ | AUTH-01 | Se connecter avec un compte approuvé. | JWT reçu et redirection adaptée au rôle. |
-| ☐ | AUTH-02 | Saisir un mauvais mot de passe. | Refus sans divulguer de données sensibles. |
+| ☐ | AUTH-02 | Saisir un mauvais mot de passe. | Refus sans divulguer de données sensibles. |bien
 | ☐ | AUTH-03 | Se connecter avec un compte `pending`, refusé ou inactif. | Refus. |
 | ☐ | AUTH-04 | Appeler `/api/projets/` sans JWT. | HTTP `401`. |
 | ☐ | AUTH-05 | Utiliser un endpoint direction avec un consultant. | HTTP `403` ou liste vide. |

@@ -18,6 +18,13 @@ export default [
     },
   },
   {
-    ignores: ['eslint.config.js', 'prettier.config.js'],
+    ignores: [
+      'eslint.config.js',
+      'prettier.config.js',
+      // Ancienne bibliothèque UI non importée dans la livraison courante.
+      'src/components/ui/**',
+      'src/components/ui-bits.tsx',
+      'src/routes/app.ressources.tsx',
+    ],
   },
 ]

@@ -1,10 +1,13 @@
-const isDev = import.meta.env.DEV;
+type LogArguments = unknown[];
 
+const noop = (..._args: LogArguments): void => undefined;
+
+// Les journaux de débogage sont volontairement désactivés dans le navigateur.
 export const logger = {
-  log:   (...args: any[]) => { if (isDev) console.log(...args); },
-  warn:  (...args: any[]) => { if (isDev) console.warn(...args); },
-  debug: (...args: any[]) => { if (isDev) console.debug(...args); },
-  error: (...args: any[]) => console.error(...args), // erreurs toujours visibles
-  ws:    (...args: any[]) => { if (isDev) console.log('[WS]', ...args); },
-  api:   (...args: any[]) => { if (isDev) console.log('[API]', ...args); },
+  log: noop,
+  warn: noop,
+  debug: noop,
+  error: noop,
+  ws: noop,
+  api: noop,
 };

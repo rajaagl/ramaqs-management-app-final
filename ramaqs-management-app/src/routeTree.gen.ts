@@ -22,8 +22,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppUsersRouteImport } from './routes/app.users'
 import { Route as AppTachesRouteImport } from './routes/app.taches'
-import { Route as AppRisquesRouteImport } from './routes/app.risques'
-import { Route as AppRessourcesRouteImport } from './routes/app.ressources'
 import { Route as AppProjetsRouteImport } from './routes/app.projets'
 import { Route as AppProfilEditRouteImport } from './routes/app.profil-edit'
 import { Route as AppProfilRouteImport } from './routes/app.profil'
@@ -99,16 +97,6 @@ const AppTachesRoute = AppTachesRouteImport.update({
   path: '/taches',
   getParentRoute: () => AppRoute,
 } as any)
-const AppRisquesRoute = AppRisquesRouteImport.update({
-  id: '/risques',
-  path: '/risques',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppRessourcesRoute = AppRessourcesRouteImport.update({
-  id: '/ressources',
-  path: '/ressources',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppProjetsRoute = AppProjetsRouteImport.update({
   id: '/projets',
   path: '/projets',
@@ -174,8 +162,6 @@ export interface FileRoutesByFullPath {
   '/app/profil': typeof AppProfilRoute
   '/app/profil-edit': typeof AppProfilEditRoute
   '/app/projets': typeof AppProjetsRoute
-  '/app/ressources': typeof AppRessourcesRoute
-  '/app/risques': typeof AppRisquesRoute
   '/app/taches': typeof AppTachesRouteWithChildren
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
@@ -199,8 +185,6 @@ export interface FileRoutesByTo {
   '/app/profil': typeof AppProfilRoute
   '/app/profil-edit': typeof AppProfilEditRoute
   '/app/projets': typeof AppProjetsRoute
-  '/app/ressources': typeof AppRessourcesRoute
-  '/app/risques': typeof AppRisquesRoute
   '/app/taches': typeof AppTachesRouteWithChildren
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
@@ -226,8 +210,6 @@ export interface FileRoutesById {
   '/app/profil': typeof AppProfilRoute
   '/app/profil-edit': typeof AppProfilEditRoute
   '/app/projets': typeof AppProjetsRoute
-  '/app/ressources': typeof AppRessourcesRoute
-  '/app/risques': typeof AppRisquesRoute
   '/app/taches': typeof AppTachesRouteWithChildren
   '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
@@ -254,8 +236,6 @@ export interface FileRouteTypes {
     | '/app/profil'
     | '/app/profil-edit'
     | '/app/projets'
-    | '/app/ressources'
-    | '/app/risques'
     | '/app/taches'
     | '/app/users'
     | '/app/'
@@ -279,8 +259,6 @@ export interface FileRouteTypes {
     | '/app/profil'
     | '/app/profil-edit'
     | '/app/projets'
-    | '/app/ressources'
-    | '/app/risques'
     | '/app/taches'
     | '/app/users'
     | '/app'
@@ -305,8 +283,6 @@ export interface FileRouteTypes {
     | '/app/profil'
     | '/app/profil-edit'
     | '/app/projets'
-    | '/app/ressources'
-    | '/app/risques'
     | '/app/taches'
     | '/app/users'
     | '/app/'
@@ -419,20 +395,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTachesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/risques': {
-      id: '/app/risques'
-      path: '/risques'
-      fullPath: '/app/risques'
-      preLoaderRoute: typeof AppRisquesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/ressources': {
-      id: '/app/ressources'
-      path: '/ressources'
-      fullPath: '/app/ressources'
-      preLoaderRoute: typeof AppRessourcesRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/app/projets': {
       id: '/app/projets'
       path: '/projets'
@@ -520,8 +482,6 @@ interface AppRouteChildren {
   AppProfilRoute: typeof AppProfilRoute
   AppProfilEditRoute: typeof AppProfilEditRoute
   AppProjetsRoute: typeof AppProjetsRoute
-  AppRessourcesRoute: typeof AppRessourcesRoute
-  AppRisquesRoute: typeof AppRisquesRoute
   AppTachesRoute: typeof AppTachesRouteWithChildren
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -536,8 +496,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppProfilRoute: AppProfilRoute,
   AppProfilEditRoute: AppProfilEditRoute,
   AppProjetsRoute: AppProjetsRoute,
-  AppRessourcesRoute: AppRessourcesRoute,
-  AppRisquesRoute: AppRisquesRoute,
   AppTachesRoute: AppTachesRouteWithChildren,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
