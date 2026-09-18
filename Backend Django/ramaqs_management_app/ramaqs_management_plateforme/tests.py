@@ -1,12 +1,14 @@
 from datetime import date
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.conf import settings
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
 
 from .models import Document, Notification, PasswordResetToken, Projet, Tache, Utilisateur
+from .services.email_service import EmailService
 from .views import resoudre_utilisateur_existant
 
 
@@ -36,8 +38,7 @@ class PreproductionApiTests(APITestCase):
             budget='10000.00',
             statut='en_cours',
             client=self.client_user,
-            domaine='Conseil',
-            priorite='haute',
+            domaine=['Conseil'],
         )
         self.projet.chef_projet.add(self.chef)
         self.second_projet = Projet.objects.create(
@@ -49,8 +50,7 @@ class PreproductionApiTests(APITestCase):
             budget='5000.00',
             statut='en_cours',
             client=self.client_user,
-            domaine='Conseil',
-            priorite='normale',
+            domaine=['Conseil'],
         )
         self.tache = Tache.objects.create(
             titre='Tâche de recette',
@@ -186,11 +186,18 @@ class PreproductionApiTests(APITestCase):
         response = self.client.get('/api/taches/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_project_priority_and_business_validation_are_exposed(self):
+    def test_project_domains_and_business_validation_are_exposed(self):
         self.client.force_authenticate(self.direction)
         response = self.client.get(f'/api/projets/{self.projet.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['priorite'], 'haute')
+        self.assertEqual(response.data['domaine'], ['Conseil'])
+        updated = self.client.patch(
+            f'/api/projets/{self.projet.id}/',
+            {'domaine': ['AgriTech', 'IoT']},
+            format='json',
+        )
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+        self.assertEqual(updated.data['domaine'], ['AgriTech', 'IoT'])
         invalid = self.client.patch(
             f'/api/projets/{self.projet.id}/',
             {'date_fin_prevue': '2025-12-31', 'budget': '-1'},
@@ -204,6 +211,18 @@ class PreproductionApiTests(APITestCase):
         self.assertIsNone(user)
         self.assertIn('Créez et approuvez', error)
         self.assertEqual(Utilisateur.objects.count(), before)
+
+    def test_unreleased_finance_and_resource_endpoints_are_not_public(self):
+        self.client.force_authenticate(self.direction)
+        for endpoint in ('/api/budgets/', '/api/kpis/', '/api/ressources/'):
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(self.client.get(endpoint).status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch('ramaqs_management_plateforme.services.email_service.send_mail')
+    def test_approval_email_uses_the_configured_sender(self, mock_send_mail):
+        mock_send_mail.return_value = 1
+        self.assertTrue(EmailService.send_approval_email(self.consultant, 'Consultant'))
+        self.assertEqual(mock_send_mail.call_args.kwargs['from_email'], settings.DEFAULT_FROM_EMAIL)
 
     def test_document_upload_rejects_an_executable_disguised_as_document(self):
         self.client.force_authenticate(self.consultant)
@@ -227,10 +246,12 @@ class PreproductionApiTests(APITestCase):
         mock_send_mail.return_value = 1
         response = self.client.post(
             '/api/auth/forgot-password/',
-            {'email': self.consultant.email, 'telephone': self.consultant.telephone},
+            {'email': self.consultant.email},
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(PasswordResetToken.objects.filter(user=self.consultant, used=False).count(), 1)
         mock_send_mail.assert_called_once()
         self.assertNotIn(self.password, mock_send_mail.call_args.kwargs['message'])
+        self.assertIn('Réinitialiser mon mot de passe', mock_send_mail.call_args.kwargs['html_message'])
+        self.assertEqual(mock_send_mail.call_args.kwargs['from_email'], settings.DEFAULT_FROM_EMAIL)

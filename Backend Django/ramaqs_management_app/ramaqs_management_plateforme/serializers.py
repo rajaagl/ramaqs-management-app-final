@@ -195,7 +195,7 @@ class ProjetSerializer(serializers.ModelSerializer):
                   'date_fin_prevue', 'date_fin_reelle', 'budget', 'statut',
                   'avancement_globale', 'client', 'client_nom', 'chef_projet',
                   'chef_projet_nom', 'partenaires', 'partenaires_noms', 'domaine',
-                  'priorite', 'nombre_membres']
+                  'nombre_membres']
         read_only_fields = ['id']
     
     def get_partenaires_noms(self, obj):
@@ -288,7 +288,12 @@ class TacheSerializer(serializers.ModelSerializer):
         nouvel_consultant = validated_data.get('consultant', instance.consultant)
         nouvel_priorite = validated_data.get('priorite', instance.priorite)
 
-       
+        # Toute clôture d'une tâche en cours doit être validée avant le statut final.
+        if ancien_statut == 'en_cours' and nouvel_statut == 'termine':
+            nouvel_statut = 'en_attente_validation'
+            validated_data['statut'] = nouvel_statut
+            validated_data['avancement'] = 100
+
         
         # Liste des champs modifiés (pour notification générale)
         champs_modifies = []

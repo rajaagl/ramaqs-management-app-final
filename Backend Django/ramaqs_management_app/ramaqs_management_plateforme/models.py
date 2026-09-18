@@ -186,8 +186,7 @@ class Projet(models.Model):
     client = models.ForeignKey(Utilisateur, on_delete=models.CASCADE, related_name='projets_client')
     chef_projet = models.ManyToManyField(Utilisateur, related_name='projets_chef')
     partenaires = models.ManyToManyField(Utilisateur, related_name='projets_partenaire', limit_choices_to={'role': 'partenaire'})
-    domaine = models.CharField(max_length=100)
-    priorite = models.CharField(max_length=50)
+    domaine = models.JSONField(default=list, blank=True)
     
     class Meta:
         db_table = 'projets'

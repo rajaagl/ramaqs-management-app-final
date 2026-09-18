@@ -216,10 +216,10 @@ class UserApproveRejectView(generics.UpdateAPIView):
         role_label = role_labels.get(user.role, user.role)
     
         try:
-            EmailService.send_approval_email(user, role_label)
-            logger.info(f"Email d'approbation envoyé à {user.email}")
+            if not EmailService.send_approval_email(user, role_label):
+                logger.error("Email d'approbation non envoyé à %s.", user.email)
         except Exception as e:
-            logger.error(f"Erreur envoi email: {str(e)}")
+            logger.exception("Erreur d'envoi de l'email d'approbation à %s.", user.email)
         
        
         try:

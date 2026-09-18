@@ -19,6 +19,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils.html import escape, strip_tags
 import secrets
 from datetime import timedelta
 from .models import Utilisateur, PasswordResetToken
@@ -106,8 +107,6 @@ class ProjetViewSet(BaseProtectedViewSet):
     # Filtres exacts
     filterset_fields = {
         'statut': ['exact'],
-        'priorite': ['exact'],
-        'domaine': ['exact'],
         'avancement_globale': ['gte', 'lte'],
         'date_debut': ['gte', 'lte'],
         'date_fin_prevue': ['gte', 'lte'],
@@ -277,6 +276,11 @@ class TacheViewSet(BaseProtectedViewSet):
         logger.info(f"Tâche {instance.id} supprimée avec succès")
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
+        if instance.statut == 'en_attente_validation' and 'statut' in request.data:
+            return Response(
+                {'detail': "Utilisez les actions d'approbation ou de rejet pour une tâche à valider."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if not is_direction(request.user) and not instance.projet.chef_projet.filter(id=request.user.id).exists():
             forbidden = {
                 'projet', 'consultant', 'titre', 'description', 'priorite',
@@ -586,16 +590,15 @@ class LoginView(TokenObtainPairView):
 # ========== MOT DE PASSE OUBLIÉ ==========
 
 class ForgotPasswordView(APIView):
-    """Envoie un lien de réinitialisation à usage unique, valable 30 minutes."""
+    """Envoie un lien de réinitialisation à usage unique, valable 10 minutes."""
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email     = request.data.get('email')
-        telephone = request.data.get('telephone')
+        email = (request.data.get('email') or '').strip()
 
-        if not email or not telephone:
+        if not email:
             return Response(
-                {'error': 'Email et téléphone sont requis'},
+                {'error': 'Email requis'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -604,7 +607,11 @@ class ForgotPasswordView(APIView):
             status=status.HTTP_200_OK,
         )
         try:
-            user = Utilisateur.objects.get(email=email, telephone=telephone, is_active=True, statut_approbation='approved')
+            user = Utilisateur.objects.get(
+                email__iexact=email,
+                is_active=True,
+                statut_approbation='approved',
+            )
         except Utilisateur.DoesNotExist:
             return generic_response
 
@@ -612,17 +619,58 @@ class ForgotPasswordView(APIView):
         reset_token = PasswordResetToken.objects.create(
             user=user,
             token=secrets.token_urlsafe(32),
-            expires_at=timezone.now() + timedelta(minutes=30),
+            expires_at=timezone.now() + timedelta(minutes=10),
         )
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token.token}"
+        display_name = escape(user.nom or user.email)
+        safe_reset_url = escape(reset_url)
+        html_message = f"""
+<!doctype html>
+<html lang="fr">
+  <body style="margin:0;padding:0;background:#fef2f2;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Réinitialisez votre mot de passe RAMAQS Consulting.</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fef2f2;padding:32px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 12px 30px rgba(127,29,29,.12);">
+          <tr><td style="height:6px;background:#dc2626;"></td></tr>
+          <tr><td align="center" style="padding:32px 32px 20px;">
+            <div style="width:52px;height:52px;line-height:52px;text-align:center;background:#dc2626;border-radius:14px;color:#ffffff;font-size:25px;font-weight:700;">R</div>
+            <h1 style="margin:22px 0 8px;font-size:25px;line-height:32px;color:#111827;">Réinitialiser votre mot de passe</h1>
+            <p style="margin:0;font-size:16px;line-height:24px;color:#6b7280;">Une demande de réinitialisation a été effectuée pour votre compte RAMAQS.</p>
+          </td></tr>
+          <tr><td style="padding:0 32px 12px;">
+            <p style="margin:0 0 16px;font-size:16px;line-height:24px;">Bonjour <strong>{display_name}</strong>,</p>
+            <p style="margin:0;font-size:16px;line-height:24px;color:#374151;">Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.</p>
+          </td></tr>
+          <tr><td align="center" style="padding:16px 32px 28px;">
+            <a href="{safe_reset_url}" style="display:inline-block;background:#dc2626;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 28px;border-radius:9px;">Réinitialiser mon mot de passe</a>
+          </td></tr>
+          <tr><td style="padding:0 32px 24px;">
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px;font-size:14px;line-height:21px;color:#9a3412;">
+              <strong>Important :</strong> ce lien est valable 10 minutes et ne peut être utilisé qu'une seule fois.
+            </div>
+            <p style="margin:20px 0 0;font-size:13px;line-height:20px;color:#6b7280;">Si vous n'avez pas demandé cette réinitialisation, vous pouvez ignorer cet e-mail. Votre mot de passe ne sera pas modifié.</p>
+          </td></tr>
+          <tr><td style="padding:20px 32px;background:#fffafa;border-top:1px solid #fee2e2;text-align:center;font-size:12px;line-height:18px;color:#9ca3af;">RAMAQS Consulting · Plateforme de gestion de projets</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>
+"""
         try:
-            send_mail(
-                subject='RAMAQS — Réinitialisation du mot de passe',
-                message=f"Utilisez ce lien valable 30 minutes : {reset_url}",
+            result = send_mail(
+                subject='RAMAQS - Réinitialisation du mot de passe',
+                message=strip_tags(html_message),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[user.email],
+                html_message=html_message,
                 fail_silently=False,
             )
+            if result != 1:
+                logger.error("L'email de réinitialisation n'a pas été accepté pour %s.", user.email)
+            else:
+                logger.info("Email de réinitialisation envoyé à %s.", user.email)
         except Exception:
             logger.exception("Échec de l'envoi du lien de réinitialisation")
         return generic_response
@@ -1214,8 +1262,11 @@ class ImportProjetsExcelView(APIView):
                     objectsif=str(row_data.get('objectsif', '') or ''),
                     statut=statut,
                     budget=budget,
-                    domaine=str(row_data.get('domaine', '') or ''),
-                    priorite=str(row_data.get('priorite', 'normale') or 'normale'),
+                    domaine=[
+                        domain.strip()
+                        for domain in str(row_data.get('domaine', '') or '').replace('•', ',').replace(';', ',').split(',')
+                        if domain.strip()
+                    ],
                     date_debut=date_debut,
                     date_fin_prevue=date_fin_prevue,
                     client=client,

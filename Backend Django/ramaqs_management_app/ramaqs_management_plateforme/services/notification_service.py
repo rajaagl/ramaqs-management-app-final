@@ -27,9 +27,9 @@ def envoyer_notification_ws(utilisateur_id, notification):
                 },
             }
         )
-    except Exception as e:
-        # Ne jamais bloquer la logique métier si le WS est down
-        print(f"[WS] Erreur push notification: {e}")
+    except Exception:
+        # Ne jamais bloquer la logique métier si le WS est indisponible.
+        logger.exception("Échec de l'envoi WebSocket de la notification")
 
 class NotificationService:
 
