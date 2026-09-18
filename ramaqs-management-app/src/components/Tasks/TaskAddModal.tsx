@@ -26,7 +26,7 @@ export function TaskAddModal({ onClose, onSuccess }: TaskAddModalProps) {
   const { data: projetsData, isLoading: projetsLoading } = useGetProjetsQuery({ page: 1, pageSize: 100 });
   
   // ✅ Remplacer useGetRessourcesQuery par useGetConsultantsQuery
-  const { data: consultantsData, isLoading: consultantsLoading } = useGetConsultantsQuery();
+  const { data: consultantsData, isLoading: consultantsLoading } = useGetConsultantsQuery({ page: 1 });
 
   const [formData, setFormData] = useState({
     title: "",
@@ -55,7 +55,6 @@ export function TaskAddModal({ onClose, onSuccess }: TaskAddModalProps) {
   // ✅ Consultants - récupérés depuis /api/consultants/
   const consultants = Array.isArray(consultantsData) ? consultantsData : (consultantsData?.results || []);
   
-  console.log("🔍 Consultants disponibles:", consultants);
 
   const canAddTask = userRole === 'direction' || userRole === 'chef_projet';
 
@@ -75,7 +74,6 @@ export function TaskAddModal({ onClose, onSuccess }: TaskAddModalProps) {
   const handleConsultantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
     const selectedConsultant = consultants.find((c: any) => c.id === selectedId);
-    console.log("🟢 Consultant sélectionné:", selectedId, selectedConsultant);
     setFormData(prev => ({
       ...prev,
       assigneA: selectedId,
@@ -89,15 +87,12 @@ export function TaskAddModal({ onClose, onSuccess }: TaskAddModalProps) {
      
   //  Log unique pour chaque soumission
   const submitId = Math.random().toString(36);
-  console.log(`🔴 [SUBMIT-${submitId}] Début de soumission à:`, new Date().toISOString());
   
      //  Empêcher les doubles soumissions
   if (isSubmitting || isLoading) {
-    console.log("⚠️ Soumission déjà en cours, ignorée");
     return;
   }
   if (isSubmitting || hasSubmitted.current) {
-      console.log("⚠️ Soumission déjà en cours, ignorée");
       return;
     }
     
@@ -152,12 +147,11 @@ export function TaskAddModal({ onClose, onSuccess }: TaskAddModalProps) {
         onClose();
       }, 1500);
     } catch (error: any) {
-      console.error("❌ Erreur:", error);
-      console.error("❌ Détails:", error?.data);
       
       if (error?.data) {
-        const errors = error.data;
-        const firstError = Object.values(errors)[0]?.[0];
+        const errors = error.data as Record<string, string | string[]>;
+        const firstValue = Object.values(errors)[0];
+        const firstError = Array.isArray(firstValue) ? firstValue[0] : firstValue;
         setErrorMessage(firstError || "Erreur lors de la création");
         hasSubmitted.current = false; // ← Réinitialiser en cas d'erreur
       } else {

@@ -18,9 +18,10 @@ import type { Projet } from '../store/interfaces';
 import { ProtectedRoute } from "@/components/ui/ProtectedRoute";
 import { AddProjectForm } from "../components/Projects/AddProjectForm";
 import { EditProjectModal } from "../components/Projects/EditProjectModal";
-import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
+import { DeleteProjectModal } from "../components/Projects/DeleteProjectModal";
 import { ImportExcelModal } from "../components/Projects/ImportExcelModal";
 import { EquipeProjetModal } from "../components/Projects/EquipeProjetModal";
+import { normalizeProjectDomains, PROJECT_DOMAINS } from "../constants/projectDomains";
 
 
 type ViewMode = "grid" | "list";
@@ -116,7 +117,7 @@ function ProjetsPage() {
     const matchChef = !chefFilter || chefIds.includes(chefFilter);
 
     // ✅ FIX : le champ s'appelle "domaine" (pas "domain")
-    const matchDomaine = !domaineFilter || project.domaine === domaineFilter;
+    const matchDomaine = !domaineFilter || normalizeProjectDomains(project.domaine).includes(domaineFilter);
 
     // ✅ FIX : le filtre date était déclaré mais jamais appliqué.
     // On affiche les projets dont la date de début est >= à la date choisie.
@@ -143,7 +144,6 @@ function ProjetsPage() {
       setTimeout(() => setSuccessMessage(null), 3000);
       refetch();
     } catch (error) {
-      console.error(error);
     } finally {
       setDeletingProjectId(null);
     }
@@ -377,11 +377,9 @@ function ProjetsPage() {
           className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-sm outline-none focus:ring-2 focus:ring-red-500/50"
         >
           <option value="">Tous les domaines</option>
-          <option value="Transformation Digitale">Transformation Digitale</option>
-          <option value="Intelligence Artificielle">Intelligence Artificielle</option>
-          <option value="Cloud">Cloud</option>
-          <option value="Sécurité">Sécurité</option>
-          <option value="Data">Data</option>
+          {PROJECT_DOMAINS.map((domain) => (
+            <option key={domain} value={domain}>{domain}</option>
+          ))}
         </select>
       </div>
       

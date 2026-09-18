@@ -26,7 +26,6 @@ function ProfilEditPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Données sauvegardées :", formData);
     // Ici, appel API pour sauvegarder
     navigate({ to: "/app/profil" });
   };

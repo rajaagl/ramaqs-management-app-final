@@ -2,7 +2,7 @@
 
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Mail, Phone, CheckCircle, AlertCircle, Loader2, Send } from "lucide-react";
+import { Mail, CheckCircle, AlertCircle, Loader2, Send } from "lucide-react";
 import { API_BASE_URL } from "../config/endpoints";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/forgot-password")({
 });
 
 function ForgotPasswordPage() {
-  const [formData, setFormData] = useState({ email: "", telephone: "" });
+  const [formData, setFormData] = useState({ email: "" });
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -20,19 +20,14 @@ function ForgotPasswordPage() {
     setError("");
 
     // ── Validation frontend ───────────────────────────────────────────────────
-    if (!formData.email || !formData.telephone) {
-      setError("Email et numéro de téléphone sont requis");
+    if (!formData.email) {
+      setError("Email requis");
       return;
     }
     if (!/\S+@\S+\.\S+/.test(formData.email)) {
       setError("Email invalide");
       return;
     }
-    if (formData.telephone.length < 9) {
-      setError("Numéro de téléphone invalide (minimum 9 chiffres)");
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -41,7 +36,6 @@ function ForgotPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: formData.email,
-          telephone: formData.telephone,
         }),
       });
 
@@ -102,7 +96,7 @@ function ForgotPasswordPage() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Mot de passe oublié</h2>
           <p className="text-gray-500 mt-2 text-sm">
-            Entrez votre email et numéro de téléphone pour recevoir un lien de réinitialisation par e-mail
+            Entrez votre e-mail pour recevoir un lien de réinitialisation.
           </p>
         </div>
 
@@ -124,28 +118,6 @@ function ForgotPasswordPage() {
                 disabled={isLoading}
               />
             </div>
-          </div>
-
-          {/* Téléphone */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Numéro de téléphone <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="tel"
-                value={formData.telephone}
-                onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                placeholder="0600000000"
-                className="w-full h-11 pl-10 pr-3 rounded-lg border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Le numéro enregistré lors de votre inscription
-            </p>
           </div>
 
           {/* ✅ Erreur (400 / 500 / validation) */}

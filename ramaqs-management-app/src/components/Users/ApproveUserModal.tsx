@@ -52,8 +52,8 @@ export function ApproveUserModal({ user, onConfirm, onCancel, isLoading }: Appro
               {roleLabel}
             </span>
           </div>
-          <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
-           Un Email ou message Whatsapp avec un mot de passe temporaire sera envoyé à l'utilisateur.
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+            Un e-mail de confirmation sera envoyé à l’utilisateur. Il pourra se connecter avec le mot de passe choisi lors de son inscription.
           </p>
         </div>
 

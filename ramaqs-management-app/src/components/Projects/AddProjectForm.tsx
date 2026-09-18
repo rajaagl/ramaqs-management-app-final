@@ -12,6 +12,7 @@ import {
   useGetPartenairesQuery,
 } from "../../store/api/api";
 import { useAppSelector } from "../../store/store";
+import { PROJECT_DOMAINS } from "../../constants/projectDomains";
 
 interface AddProjectFormProps {
   onClose: () => void;
@@ -49,7 +50,7 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
     client: "",
     clientId: "",
     isNewClient: false,
-    domaine: "Général",
+    domaine: ["Général"],
     date_debut: new Date().toISOString().split('T')[0],
     date_fin_prevue: new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0],
     chefProjetIds: [] as string[],
@@ -64,11 +65,8 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
 const existingClients = Array.isArray(clientsData) ? clientsData : (clientsData?.results || []);
 const chefsProjet = Array.isArray(chefsData) ? chefsData : (chefsData?.results || []);
 const partenaires = Array.isArray(partenairesData) ? partenairesData : (partenairesData?.results || []);
+
   
-  // ✅ Logs de débogage
-  console.log("👥 Clients:", existingClients);
-  console.log("👔 Chefs de projet:", chefsProjet);
-  console.log("🤝 Partenaires:", partenaires);
   
   // ✅ Validation des dates : date_fin >= date_debut
   const validateDates = (debut: string, fin: string) => {
@@ -113,6 +111,12 @@ const partenaires = Array.isArray(partenairesData) ? partenairesData : (partenai
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
+    setErrorMessage(null);
+  };
+
+  const handleDomainChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const domaines = Array.from(e.target.selectedOptions, (option) => option.value);
+    setFormData((prev) => ({ ...prev, domaine: domaines }));
     setErrorMessage(null);
   };
   
@@ -186,6 +190,10 @@ const partenaires = Array.isArray(partenairesData) ? partenairesData : (partenai
       setErrorMessage("Au moins un chef de projet est requis");
       return;
     }
+    if (formData.domaine.length === 0) {
+      setErrorMessage("Sélectionnez au moins un secteur");
+      return;
+    }
     
     // ✅ Validation des dates
     if (formData.date_fin_prevue < formData.date_debut) {
@@ -226,8 +234,7 @@ const partenaires = Array.isArray(partenairesData) ? partenairesData : (partenai
       } else {
         payload.client_id = formData.clientId;
       }
-      
-      console.log("📤 Création projet - Payload:", JSON.stringify(payload, null, 2));
+
       await createProjet(payload).unwrap();
       
       setSuccessMessage("Projet créé avec succès !");
@@ -236,8 +243,6 @@ const partenaires = Array.isArray(partenairesData) ? partenairesData : (partenai
         onClose();
       }, 1500);
     } catch (error: any) {
-      console.error("❌ Erreur création projet:", error);
-      
       if (error?.data) {
         const errors = Object.entries(error.data)
           .map(([field, msgs]) => `${field}: ${msgs}`)
@@ -389,22 +394,16 @@ const partenaires = Array.isArray(partenairesData) ? partenairesData : (partenai
             <select
               name="domaine"
               value={formData.domaine}
-              onChange={handleChange}
+              onChange={handleDomainChange}
+              multiple
+              size={6}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-red-500/50 outline-none"
             >
-              <option value="Général">Général</option>
-              <option value="Transformation Digitale">Transformation Digitale</option>
-              <option value="Intelligence Artificielle">Intelligence Artificielle</option>
-              <option value="Cloud">Cloud</option>
-              <option value="Sécurité">Sécurité</option>
-              <option value="Data">Data</option>
-              <option value="Industrie 4.0">Industrie 4.0</option>
-              <option value="Conseil & formation">Conseil & formation</option>
-              <option value="Telecom">Telecom</option>
-              <option value="Agriculture">Agriculture</option>
-              <option value="Santé">Santé</option>
-              <option value="Agroalimentaire">Agroalimentaire</option>
+              {PROJECT_DOMAINS.map((domain) => (
+                <option key={domain} value={domain}>{domain}</option>
+              ))}
             </select>
+            <p className="mt-1 text-xs text-gray-500">Utilisez Ctrl+clic pour sélectionner plusieurs secteurs.</p>
           </div>
           
           {/* Statut et Budget */}

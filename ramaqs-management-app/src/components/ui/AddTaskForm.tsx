@@ -44,11 +44,9 @@ export function AddTaskForm({ onClose, onSuccess }: AddTaskFormProps) {
         progress: formData.avancement,
       }).unwrap();
       
-      console.log("Tâche créée avec succès:", result);
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error("Erreur lors de la création:", error);
+    } catch {
     }
   };
 

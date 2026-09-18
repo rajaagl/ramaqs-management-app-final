@@ -81,14 +81,17 @@ export interface Utilisateur {
   motDePasse: string;     
   telephone: Phone;
   photoProfile: string;
-  dateCreation: Date;
+  // L'API Django retourne `date_creation`; certains anciens écrans utilisent
+  // encore `dateCreation`. Les deux formats sont acceptés pendant la transition.
+  dateCreation?: string | Date;
+  date_creation?: string | Date;
   dernierConnexion: Date;
   actif: boolean;
   role: 'direction' | 'chef_projet' | 'consultant' | 'client' | 'partenaire';
    // ✅ CHAMPS POUR L'APPROBATION (workflow client)
   statut_approbation: 'pending' | 'approved' | 'rejected';
   justification_rejet?: string;
-  date_approbation?: Date;
+  date_approbation?: string | Date;
   approuve_par?: string;
   approuve_par_nom?: string;
    // ✅ CHAMPS POUR LES PARTENAIRES
@@ -176,7 +179,6 @@ export interface Projet {
   dateFinReelle?: Date;      
   statut: ProjectStatus;
   avancementGlobal: Percentage;
-  priorite: Priority;
   Budget: number;
   manager: string;
   client: string;
@@ -186,6 +188,7 @@ export interface Projet {
   spent: number; // budjet consommé
   progress: number; // avancement en pourcentage
   domain: string;
+  domaine: string[];
 
   // (clés étrangères)
   chefProjetId: UUID;

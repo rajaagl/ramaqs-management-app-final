@@ -67,7 +67,7 @@ function InfoRow({
           </p>
         )}
       </div>
-      {locked && <Lock className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" title="Non modifiable" />}
+      {locked && <Lock className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" aria-label="Non modifiable" />}
     </div>
   );
 }

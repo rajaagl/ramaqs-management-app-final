@@ -152,6 +152,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </div>
               <button 
                 onClick={() => setToast(null)}
+                aria-label="Fermer la notification"
                 className="text-gray-400 hover:text-gray-600 transition h-6 w-6 flex items-center justify-center rounded-full hover:bg-gray-100"
               >
                 ×
@@ -255,16 +256,19 @@ const handleSubmit = async (e: React.FormEvent) => {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1">
                       Email professionnel
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <input
+                        id="login-email"
                         type="email"
                         name="email"
                         value={formData.email}
                         onChange={handleChange}
+                        aria-invalid={Boolean(errors.email)}
+                        aria-describedby={errors.email ? "login-email-error" : undefined}
                         placeholder="utilisateur@example.com"
                         className={`w-full h-10 pl-10 pr-3 rounded-lg border ${
                           errors.email 
@@ -274,7 +278,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                       />
                     </div>
                     {errors.email && (
-                      <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                      <p id="login-email-error" className="text-xs text-red-500 mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" /> {errors.email}
                       </p>
                     )}
@@ -282,7 +286,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
                   <div>
                     <div className="flex justify-between mb-1">
-                      <label className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
                         Mot de passe
                       </label>
                       <Link 
@@ -295,10 +299,13 @@ const handleSubmit = async (e: React.FormEvent) => {
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                       <input
+                        id="login-password"
                         type={showPassword ? "text" : "password"}
                         name="password"
                         value={formData.password}
                         onChange={handleChange}
+                        aria-invalid={Boolean(errors.password)}
+                        aria-describedby={errors.password ? "login-password-error" : undefined}
                         placeholder="••••••••"
                         className={`w-full h-10 pl-10 pr-10 rounded-lg border ${
                           errors.password 
@@ -309,13 +316,15 @@ const handleSubmit = async (e: React.FormEvent) => {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                        aria-pressed={showPassword}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                     {errors.password && (
-                      <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                      <p id="login-password-error" className="text-xs text-red-500 mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" /> {errors.password}
                       </p>
                     )}

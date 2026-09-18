@@ -3,7 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { 
   Bell, CheckCheck, Trash2, Sparkles, Filter, X, 
   Search, Calendar, Eye, EyeOff, Info, AlertCircle,
-  CheckCircle, AlertTriangle, Loader2, ChevronDown,
+  CheckCircle, AlertTriangle, Loader2,
   Clock, Tag, User, Briefcase
 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -352,16 +352,6 @@ function NotificationsPage() {
                           </div>
                         </div>
                         
-                        {/* Lien d'action */}
-                        {notif.lienAction && (
-                          <a
-                            href={notif.lienAction}
-                            className="text-xs text-red-600 hover:text-red-700 mt-2 inline-flex items-center gap-1 font-medium"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            Voir le détail <ChevronDown className="h-3 w-3 -rotate-90" />
-                          </a>
-                        )}
                       </div>
                       
                       {/* Actions */}

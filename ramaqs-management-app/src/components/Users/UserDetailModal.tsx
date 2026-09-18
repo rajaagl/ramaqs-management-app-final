@@ -24,6 +24,15 @@ const roleColors: Record<string, string> = {
 };
 
 export function UserDetailModal({ user, onClose }: UserDetailModalProps) {
+  const formatDate = (value?: string | Date) => {
+    if (!value) return "Non renseignée";
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? "Non renseignée"
+      : date.toLocaleDateString('fr-FR');
+  };
+
   const getStatusIcon = () => {
     switch (user.statut_approbation) {
       case 'approved':
@@ -132,13 +141,15 @@ export function UserDetailModal({ user, onClose }: UserDetailModalProps) {
               <div className="flex items-center gap-3 text-sm">
                 <Calendar className="h-4 w-4 text-gray-400" />
                 <span className="text-gray-500">Inscription :</span>
-                <span className="text-gray-700">{new Date(user.date_creation).toLocaleDateString('fr-FR')}</span>
+                <span className="text-gray-700">
+                  {formatDate(user.dateCreation ?? user.date_creation)}
+                </span>
               </div>
               {user.date_approbation && (
                 <div className="flex items-center gap-3 text-sm">
                   <CheckCircle className="h-4 w-4 text-gray-400" />
                   <span className="text-gray-500">Approbation :</span>
-                  <span className="text-gray-700">{new Date(user.date_approbation).toLocaleDateString('fr-FR')}</span>
+                  <span className="text-gray-700">{formatDate(user.date_approbation)}</span>
                 </div>
               )}
             </div>

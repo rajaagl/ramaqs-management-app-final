@@ -10,6 +10,7 @@ import {
   useUploadDocumentMutation, useDeleteDocumentMutation,
 } from "../store/api/api";
 import { useAppSelector } from "../store/store";
+import { getToken } from "../utils/auth";
 import { ProtectedRoute } from "@/components/ui/ProtectedRoute";
 import type { Document, Projet } from "../store/interfaces";
 
@@ -76,6 +77,7 @@ function DocumentsPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadForm, setUploadForm] = useState({
@@ -117,6 +119,48 @@ function DocumentsPage() {
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDownload = async (doc: Document) => {
+    const token = getToken();
+    if (!token) {
+      showToast("Votre session a expiré. Reconnectez-vous pour télécharger ce fichier.", false);
+      return;
+    }
+    if (!doc.chemin) {
+      showToast("Le fichier est indisponible.", false);
+      return;
+    }
+
+    setDownloadingId(doc.id);
+    try {
+      const response = await fetch(doc.chemin, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        showToast(
+          response.status === 401
+            ? "Votre session a expiré. Reconnectez-vous puis réessayez."
+            : "Le téléchargement du fichier a échoué.",
+          false,
+        );
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = doc.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      showToast("Téléchargement démarré.");
+    } catch {
+      showToast("Impossible de contacter le serveur de téléchargement.", false);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   // ── Upload ──────────────────────────────────────────────────────────────
@@ -328,9 +372,17 @@ function DocumentsPage() {
                       {ext}
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <a href={doc.chemin} download onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg hover:bg-gray-100" title="Télécharger">
-                        <Download className="h-4 w-4 text-gray-500" />
-                      </a>
+                      <button
+                        type="button"
+                        disabled={downloadingId === doc.id}
+                        onClick={(event) => { event.stopPropagation(); handleDownload(doc); }}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                        title="Télécharger"
+                      >
+                        {downloadingId === doc.id
+                          ? <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                          : <Download className="h-4 w-4 text-gray-500" />}
+                      </button>
                       {canDeleteDoc(doc) && (
                         <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(doc.id); }} className="p-1.5 rounded-lg hover:bg-red-50" title="Supprimer">
                           <Trash2 className="h-4 w-4 text-red-500" />
@@ -445,9 +497,17 @@ function DocumentsPage() {
               </div>
               {selectedDoc.description && <p className="text-sm text-gray-600 border-t border-gray-100 pt-3">{selectedDoc.description}</p>}
               <div className="flex gap-3 pt-2">
-                <a href={selectedDoc.chemin} download className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-medium">
-                  <Download className="h-4 w-4" /> Télécharger
-                </a>
+                <button
+                  type="button"
+                  disabled={downloadingId === selectedDoc.id}
+                  onClick={() => handleDownload(selectedDoc)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-medium disabled:opacity-50"
+                >
+                  {downloadingId === selectedDoc.id
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Download className="h-4 w-4" />}
+                  Télécharger
+                </button>
                 {canDeleteDoc(selectedDoc) && (
                   <button onClick={() => setConfirmDeleteId(selectedDoc.id)} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm font-medium">
                     <Trash2 className="h-4 w-4" /> Supprimer

@@ -58,7 +58,6 @@ export function TaskEditModal({ task, onClose, onSuccess }: TaskEditModalProps) 
   
   useEffect(() => {
     if (task) {
-      console.log(" Initialisation tâche:", task);
       setFormData({
         title: task.title || "",
         description: task.description || "",
@@ -214,7 +213,6 @@ export function TaskEditModal({ task, onClose, onSuccess }: TaskEditModalProps) 
     }
   });
   
-  console.log("📤 Payload envoyé:", payload);
     if (Object.keys(payload).length === 0) {
       setErrorMessage("Aucune modification détectée");
       return;
@@ -224,7 +222,6 @@ export function TaskEditModal({ task, onClose, onSuccess }: TaskEditModalProps) 
       await patchTache({ id: task.id, data: payload }).unwrap();
       onSuccess();
     } catch (error: any) {
-      console.error("❌ Erreur:", error);
       setErrorMessage(error?.data?.message || "Erreur lors de la modification");
     }
   };

@@ -18,7 +18,6 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
     client: "",
     manager: "",
     statut: "planifie" as Projet['statut'],
-    priorite: "normale" as Projet['priorite'],
     progress: 0,
     Budget: 0,
     spent: 0,
@@ -48,7 +47,6 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
         client: formData.client,
         manager: formData.manager,
         statut: formData.statut,
-        priorite: formData.priorite,
         progress: Number(formData.progress),
         Budget: Number(formData.Budget),
         spent: Number(formData.spent),
@@ -56,16 +54,12 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
         health: formData.health,
       };
       
-      console.log("Envoi des données:", projetData);
       
       const result = await createProjet(projetData).unwrap();
-      
-      console.log("Projet créé avec succès:", result);
       onSuccess();
       onClose();
-    } catch (err) {
-      console.error("Erreur lors de la création:", err);
-      alert("Erreur lors de la création du projet. Vérifiez la console.");
+    } catch {
+      alert("Erreur lors de la création du projet.");
     }
   };
 
@@ -163,8 +157,8 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
             </div>
           </div>
 
-          {/* Domaine et Priorité */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Domaine */}
+          <div>
             <div>
               <label className="block text-sm font-medium mb-1">Domaine</label>
               <select
@@ -177,20 +171,6 @@ export function AddProjectForm({ onClose, onSuccess }: AddProjectFormProps) {
                 <option value="IA">IA</option>
                 <option value="Industrie 4.0">Industrie 4.0</option>
                 <option value="Conseil & formation">Conseil & formation</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Priorité</label>
-              <select
-                name="priorite"
-                value={formData.priorite}
-                onChange={handleChange}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="faible">Faible</option>
-                <option value="normale">Normale</option>
-                <option value="haute">Haute</option>
-                <option value="critique">Critique</option>
               </select>
             </div>
           </div>

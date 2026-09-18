@@ -13,6 +13,7 @@ import {
   useGetPartenairesQuery,
 } from "../../store/api/api";
 import type { Projet, Utilisateur, Partenaire } from "../../store/interfaces";
+import { normalizeProjectDomains, PROJECT_DOMAINS } from "../../constants/projectDomains";
 
 interface EditProjectModalProps {
   project: Projet;           // ✅ on garde la prop pour l'id + l'affichage immédiat du header
@@ -71,7 +72,7 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
     client: "",
     clientId: "",
     code: "",
-    domaine: "",
+    domaine: [] as string[],
     date_debut: "",
     date_fin_prevue: "",
     chef_projet: [] as string[],
@@ -106,7 +107,7 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
       client: clientId,
       clientId: clientId,
       code: raw.code || "",
-      domaine: raw.domaine || "Général",
+      domaine: normalizeProjectDomains(raw.domaine),
       date_debut: toDateInput(raw.date_debut ?? raw.dateDebut),
       date_fin_prevue: toDateInput(raw.date_fin_prevue ?? raw.dateFinPrevue),
       chef_projet: chefIds,
@@ -154,6 +155,12 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
     setErrorMessage(null);
   };
 
+  const handleDomainChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const domaines = Array.from(e.target.selectedOptions, (option) => option.value);
+    setFormData((prev) => ({ ...prev, domaine: domaines }));
+    setErrorMessage(null);
+  };
+
   const removeItem = (field: "chef_projet" | "partenaires", id: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -176,6 +183,7 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
     if (!formData.objectsif.trim()) { setErrorMessage("L'objectif du projet est requis"); return; }
     if (!formData.clientId) { setErrorMessage("Le client est requis"); return; }
     if (formData.chef_projet.length === 0) { setErrorMessage("Au moins un chef de projet est requis"); return; }
+    if (formData.domaine.length === 0) { setErrorMessage("Sélectionnez au moins un secteur"); return; }
     if (formData.date_fin_prevue < formData.date_debut) {
       setErrorMessage("La date de fin prévue doit être postérieure à la date de début");
       return;
@@ -198,8 +206,6 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
         chef_projet: formData.chef_projet,
         partenaires: formData.partenaires,
       };
-
-      console.log("📤 Payload modification projet:", payload);
       await updateProjet({ id: project.id, data: payload }).unwrap();
 
       setSuccessMessage("Projet modifié avec succès !");
@@ -208,7 +214,6 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
         onClose();
       }, 1500);
     } catch (error: any) {
-      console.error("❌ Erreur modification projet:", error);
       if (error?.data) {
         const errors = Object.entries(error.data)
           .map(([field, msgs]) => `${field}: ${msgs}`)
@@ -487,16 +492,16 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
                 <select
                   name="domaine"
                   value={formData.domaine}
-                  onChange={handleChange}
+                  onChange={handleDomainChange}
+                  multiple
+                  size={6}
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-red-500/50 outline-none"
                 >
-                  <option value="Général">Général</option>
-                  <option value="Transformation Digitale">Transformation Digitale</option>
-                  <option value="Intelligence Artificielle">Intelligence Artificielle</option>
-                  <option value="Cloud">Cloud</option>
-                  <option value="Sécurité">Sécurité</option>
-                  <option value="Data">Data</option>
+                  {PROJECT_DOMAINS.map((domain) => (
+                    <option key={domain} value={domain}>{domain}</option>
+                  ))}
                 </select>
+                <p className="mt-1 text-xs text-gray-500">Utilisez Ctrl+clic pour sélectionner plusieurs secteurs.</p>
               </div>
             </div>
 

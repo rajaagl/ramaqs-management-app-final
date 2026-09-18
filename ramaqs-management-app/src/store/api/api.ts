@@ -82,7 +82,7 @@ transformResponse: (response: any) => {
         clientId: projet.clientId || projet.client_id,
         clientNom: projet.client_nom,  // ← AJOUTE CETTE LIGNE
         code: projet.code,
-        domaine: projet.domaine,
+        domaine: Array.isArray(projet.domaine) ? projet.domaine : (projet.domaine ? [projet.domaine] : []),
         dateDebut: projet.date_debut,
         dateFinPrevue: projet.date_fin_prevue,
         progress: Number(projet.avancement_globale) || 0,
@@ -113,7 +113,7 @@ transformResponse: (response: any) => {
         clientId: projet.clientId || projet.client_id,
         clientNom: projet.client_nom,  // ← AJOUTE CETTE LIGNE
         code: projet.code,
-        domaine: projet.domaine,
+        domaine: Array.isArray(projet.domaine) ? projet.domaine : (projet.domaine ? [projet.domaine] : []),
         dateDebut: projet.date_debut,
         dateFinPrevue: projet.date_fin_prevue,
         progress: Number(projet.avancement_globale) || 0,
@@ -311,8 +311,6 @@ getTacheById: builder.query<Tache, string>({
 // store/api/api.ts
 createTache: builder.mutation<Tache, Partial<Tache>>({
   query: (newTache) => {
-    console.log("🔵 [API] createTache appelé à:", new Date().toISOString());
-    console.log("🔵 [API] ID unique:", Math.random().toString(36));
     return {
       url: '/taches/',
       method: 'POST',
@@ -361,7 +359,6 @@ patchTache: builder.mutation<Tache, { id: string; data: Partial<Tache> }>({
       }
     });
     if (process.env.NODE_ENV !== 'production') {
-      console.log("📤 [patchTache] body envoyé:", body);
     }
     return {
       url: `/taches/${arg.id}/`,
@@ -373,6 +370,30 @@ patchTache: builder.mutation<Tache, { id: string; data: Partial<Tache> }>({
     { type: 'Tache', id: arg.id },
     { type: 'Tache', id: 'LIST' },
      'Tache',
+  ],
+}),
+
+approveTaskValidation: builder.mutation<void, string>({
+  query: (id) => ({
+    url: `/taches/${id}/approuver_validation/`,
+    method: 'POST',
+  }),
+  invalidatesTags: (_result, _error, id) => [
+    { type: 'Tache', id },
+    { type: 'Tache', id: 'LIST' },
+    'Projet',
+  ],
+}),
+
+rejectTaskValidation: builder.mutation<void, string>({
+  query: (id) => ({
+    url: `/taches/${id}/rejeter_validation/`,
+    method: 'POST',
+  }),
+  invalidatesTags: (_result, _error, id) => [
+    { type: 'Tache', id },
+    { type: 'Tache', id: 'LIST' },
+    'Projet',
   ],
 }),
   
@@ -502,7 +523,7 @@ deleteTache: builder.mutation<void, string>({
     }),
 
     // ========== LIMITATIONS (Clients) ==========
-    getClients: builder.query<PaginatedResponse<Client>, { search?: string; page?: number }>({
+    getClients: builder.query<PaginatedResponse<Client>, { search?: string; page?: number; pageSize?: number }>({
       query: (params) => ({
         url: '/clients/',
         params,
@@ -555,7 +576,7 @@ deleteTache: builder.mutation<void, string>({
     }),
 
     // ========== PARTENAIRES ==========
-    getPartenaires: builder.query<PaginatedResponse<Partenaire>, { search?: string; actif?: boolean; page?: number }>({
+    getPartenaires: builder.query<PaginatedResponse<Partenaire>, { search?: string; actif?: boolean; page?: number; pageSize?: number }>({
       query: (params) => ({
         url: '/partenaires/',
         params,
@@ -654,11 +675,15 @@ deleteTache: builder.mutation<void, string>({
 
     // ========== NOTIFICATIONS ==========
     // store/api/api.ts
-getNotifications: builder.query({
+getNotifications: builder.query<
+  PaginatedResponse<Notification>,
+  { page?: number; pageSize?: number; nonLuesSeulement?: boolean } | void
+>({
   query: (params) => ({
     url: '/notifications/',
     params: {
       page: params?.page || 1,
+      page_size: params?.pageSize || 15,
       non_lues: params?.nonLuesSeulement || false,
     },
   }),
@@ -705,12 +730,12 @@ getNotifications: builder.query({
     
     return { count: 0, results: [] };
   },
-  providesTags: (result: { results?: Array<{ id: string }>; }) => {
+  providesTags: (result) => {
     // ✅ Typage explicite pour 'item' et 'result'
     const items = result?.results || [];
     return items.length > 0
       ? [
-          ...items.map((item: any) => ({ type: 'Notification' as const, id: item.id })),
+          ...items.map((item) => ({ type: 'Notification' as const, id: item.id })),
           { type: 'Notification' as const, id: 'LIST' },
         ]
       : [{ type: 'Notification' as const, id: 'LIST' }];
@@ -1007,7 +1032,7 @@ getNotifications: builder.query({
         },
       }),
     }),
-    getChefsProjet: builder.query({
+    getChefsProjet: builder.query<PaginatedResponse<Utilisateur>, { page?: number; pageSize?: number } | void>({
        query: (params) => ({
          url: '/chefs-projet/',
          params: {
@@ -1092,6 +1117,8 @@ export const {
   useCreateTacheMutation,
   useUpdateTacheMutation,
   usePatchTacheMutation,
+  useApproveTaskValidationMutation,
+  useRejectTaskValidationMutation,
   useDeleteTacheMutation,
   
   // Authentification

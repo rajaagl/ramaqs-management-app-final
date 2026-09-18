@@ -84,8 +84,7 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
         resetStates();
       }, 1500);
       
-    } catch (error) {
-      console.error('Erreur export CSV:', error);
+    } catch {
       alert('Erreur lors de l\'export CSV');
     } finally {
       setIsExporting(false);
@@ -195,8 +194,7 @@ export function ExportModal({ isOpen, onClose, projets, taches, stats }: ExportM
         resetStates();
       }, 1500);
       
-    } catch (error) {
-      console.error('Erreur export PDF:', error);
+    } catch {
       alert('Erreur lors de l\'export PDF');
     } finally {
       setIsExporting(false);

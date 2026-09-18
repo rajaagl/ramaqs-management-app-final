@@ -2,7 +2,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { 
   Building2, Phone, Mail, Globe, MapPin, Shield, 
-  FileText, Scale, Printer, ExternalLink, CheckCircle
+  FileText, Scale, ExternalLink, CheckCircle
 } from "lucide-react";
 
 export const Route = createFileRoute("/mentions-legales")({
@@ -11,10 +11,6 @@ export const Route = createFileRoute("/mentions-legales")({
 
 function MentionsLegalesPage() {
   const currentYear = new Date().getFullYear();
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-red-50 to-white">
@@ -176,14 +172,6 @@ function MentionsLegalesPage() {
         </div>
       </main>
 
-      {/* Bouton imprimer flottant */}
-      <button
-        onClick={handlePrint}
-        className="fixed bottom-6 right-6 p-3 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition-all hover:shadow-xl z-50"
-        title="Imprimer"
-      >
-        <Printer className="h-5 w-5" />
-      </button>
     </div>
   );
 }

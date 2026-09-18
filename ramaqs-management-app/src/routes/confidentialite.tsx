@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { 
   Shield, Eye, Database, Lock, Cookie, FileText, 
   Mail, MapPin, Phone, CheckCircle, AlertCircle,
-  ExternalLink, Printer, Download, Users, Clock,
+  ExternalLink, Download, Users, Clock,
   Server, Key, Fingerprint, Bell, Building2, Scale, Target
 } from "lucide-react";
 
@@ -13,10 +13,6 @@ export const Route = createFileRoute("/confidentialite")({
 
 function ConfidentialitePage() {
   const currentYear = new Date().getFullYear();
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-red-50 to-white">
@@ -262,14 +258,6 @@ function ConfidentialitePage() {
         </div>
       </main>
 
-      {/* Bouton imprimer flottant */}
-      <button
-        onClick={handlePrint}
-        className="fixed bottom-6 right-6 p-3 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition-all hover:shadow-xl z-50"
-        title="Imprimer"
-      >
-        <Printer className="h-5 w-5" />
-      </button>
     </div>
   );
 }

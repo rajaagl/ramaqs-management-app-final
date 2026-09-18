@@ -18,6 +18,7 @@ import {
 import { useState, useMemo  } from "react";
 import type {ReactNode} from "react";
 import { ProtectedRoute } from "#/components/ui/ProtectedRoute";
+import { normalizeProjectDomains, PROJECT_DOMAINS, PROJECT_DOMAIN_SET } from "../constants/projectDomains";
 
 export const Route = createFileRoute("/app/")({
   component: () => (
@@ -144,20 +145,22 @@ function Dashboard() {
 
   //  Projets par domaine 
   const projectsByDomain = useMemo(() => {
-    const domainMap: { [key: string]: number } = {};
+    const domainMap = new Map<string, number>(PROJECT_DOMAINS.map((domain) => [domain, 0]));
     projets.forEach((p: any) => {
-      //  FIX : le champ s'appelle "domaine" (français), pas "domain".
-      // L'ancienne ligne testait deux fois le même champ inexistant.
-      const domaine = p.domaine || 'Autre';
-      domainMap[domaine] = (domainMap[domaine] || 0) + 1;
+      const domains = normalizeProjectDomains(p.domaine);
+      const projectDomains = domains.length > 0 ? new Set(domains) : new Set(['Autre']);
+
+      projectDomains.forEach((domain) => {
+        if (!PROJECT_DOMAIN_SET.has(domain) && !domainMap.has(domain)) domainMap.set(domain, 0);
+        domainMap.set(domain, (domainMap.get(domain) || 0) + 1);
+      });
     });
-    return Object.entries(domainMap)
-      .map(([name, value]) => ({ 
+    return Array.from(domainMap.entries())
+      .map(([name, value], index) => ({
         name, 
         value, 
-        color: COLORS[Object.keys(domainMap).indexOf(name) % COLORS.length] 
+        color: COLORS[index % COLORS.length]
       }))
-      .filter(d => d.value > 0);
   }, [projets]);
 
   // Projets par statut
@@ -372,17 +375,19 @@ function Dashboard() {
           {/* Distribution par domaine */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Projets par domaine</h3>
-            <div className="h-64">
+            <div className="h-80 overflow-y-auto pr-2">
               {projectsByDomain.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={projectsByDomain} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis type="number" stroke="#9ca3af" fontSize={12} />
-                    <YAxis type="category" dataKey="name" stroke="#9ca3af" fontSize={11} width={100} />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#ef4444" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div style={{ height: Math.max(256, projectsByDomain.length * 34) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={projectsByDomain} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis type="number" stroke="#9ca3af" fontSize={12} />
+                      <YAxis type="category" dataKey="name" stroke="#9ca3af" fontSize={11} width={100} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400">Aucune donnée</div>
               )}

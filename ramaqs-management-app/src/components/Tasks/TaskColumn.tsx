@@ -13,6 +13,9 @@ interface TaskColumnProps {
   tasks: Tache[];
   projectName: (id: string) => string;
   onStatusChange: (task: Tache, newStatus: string) => void;
+  canValidate: (task: Tache) => boolean;
+  onApprove: (task: Tache) => void;
+  onReject: (task: Tache) => void;
   onEdit: (task: Tache) => void;
   onDelete: (id: string) => void;
   userRole: string | undefined;
@@ -22,7 +25,7 @@ interface TaskColumnProps {
 
 export function TaskColumn({
   status, title, dotColor, borderColor, headerBg,
-  tasks, projectName, onStatusChange, onEdit, onDelete,
+  tasks, projectName, onStatusChange, canValidate, onApprove, onReject, onEdit, onDelete,
   userRole, activeTaskId, onAddTask,
 }: TaskColumnProps) {
   // useDroppable : id = status exact ("a_faire" | "en_cours" | "termine")
@@ -64,6 +67,9 @@ export function TaskColumn({
             task={task}
             projectName={projectName}
             onStatusChange={onStatusChange}
+            canValidate={canValidate(task)}
+            onApprove={onApprove}
+            onReject={onReject}
             onEdit={onEdit}
             onDelete={onDelete}
             userRole={userRole}

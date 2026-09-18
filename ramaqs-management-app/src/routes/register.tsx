@@ -135,7 +135,6 @@ const handleSubmit = async (e: React.FormEvent) => {
     navigate({ to: "/login" });
     
   } catch (err: any) {
-    console.error("❌ Erreur:", err);
     setErrors({ general: err.message || "Erreur lors de l'inscription" });
   }
 };

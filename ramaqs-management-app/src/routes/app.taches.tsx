@@ -7,6 +7,7 @@ import { useState, useCallback } from "react";
 import {
   useGetTachesQuery, useGetProjetsQuery,
   usePatchTacheMutation, useDeleteTacheMutation,
+  useApproveTaskValidationMutation, useRejectTaskValidationMutation,
 } from "../store/api/api";
 import { useAppSelector } from "../store/store";
 import { ProtectedRoute } from "#/components/ui/ProtectedRoute";
@@ -66,6 +67,15 @@ function buildTransitionPayload(task: Tache, newStatus: TaskStatus): Record<stri
       }
       break;
 
+    case "en_attente_validation":
+      // Une tâche déclarée terminée reste en attente de l'approbation finale.
+      payload.avancement = 100;
+      payload.date_fin_reelle = null;
+      if (!task.dateDebut) {
+        payload.date_debut = today;
+      }
+      break;
+
     case "termine":
       // Forcer 100% et horodater la fin réelle
       payload.avancement      = 100;
@@ -85,6 +95,7 @@ function buildTransitionPayload(task: Tache, newStatus: TaskStatus): Record<stri
 // ─────────────────────────────────────────────────────────────────────────────
 function transitionMessage(from: TaskStatus, to: TaskStatus): string {
   if (to === "termine")  return `✅ Tâche terminée — avancement mis à 100%`;
+  if (to === "en_attente_validation") return `Tâche soumise pour validation — avancement mis à 100%`;
   if (to === "en_cours" && from === "a_faire")  return `Tâche démarrée — date de début enregistrée`;
   if (to === "en_cours" && from === "termine")  return `↩Tâche réouverte — avancement remis à 10%`;
   if (to === "a_faire")  return `Tâche remise à zéro`;
@@ -118,6 +129,8 @@ function TachesPage() {
   const { data: projetsData, isLoading: pL }                     = useGetProjetsQuery({ page: 1, pageSize: 100 });
   const [patchTache]  = usePatchTacheMutation();
   const [deleteTache] = useDeleteTacheMutation();
+  const [approveTaskValidation] = useApproveTaskValidationMutation();
+  const [rejectTaskValidation] = useRejectTaskValidationMutation();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -164,6 +177,12 @@ function TachesPage() {
     return false; // consultant ne peut pas supprimer
   }, [user, myProjectIds]);
 
+  const canValidateTask = useCallback((task: Tache): boolean => {
+    if (!user || task.status !== "en_attente_validation") return false;
+    if (user.role === "direction") return true;
+    return user.role === "chef_projet" && myProjectIds.includes(task.projetId);
+  }, [user, myProjectIds]);
+
   // Peut-on créer une tâche ?
   const canCreate = user?.role === "direction" || user?.role === "chef_projet" ;
 
@@ -205,7 +224,18 @@ function TachesPage() {
   // Mise à jour du statut avec logique d'avancement automatique
   // ─────────────────────────────────────────────────────────────────────────────
   const updateStatus = async (task: Tache, newStatus: string) => {
-    if (task.status === newStatus) return;
+    const requestedStatus = newStatus as TaskStatus;
+    // Une tâche en cours ne peut pas être clôturée sans passer par validation.
+    const targetStatus: TaskStatus = (
+      task.status === "en_cours" && requestedStatus === "termine"
+    ) ? "en_attente_validation" : requestedStatus;
+
+    if (task.status === targetStatus) return;
+
+    if (task.status === "en_attente_validation") {
+      showToast("Utilisez les boutons Approuver ou Rejeter pour cette tâche", false);
+      return;
+    }
 
     // ✅ Vérifier la permission avant d'agir
     if (!canMove(task)) {
@@ -217,10 +247,10 @@ function TachesPage() {
     try {
       // ✅ Payload minimal : seulement les champs qui changent
       // (status + avancement + dates selon la transition)
-      const data = buildTransitionPayload(task, newStatus as TaskStatus);
+      const data = buildTransitionPayload(task, targetStatus);
 
       await patchTache({ id: task.id, data }).unwrap();
-      showToast(transitionMessage(task.status, newStatus as TaskStatus));
+      showToast(transitionMessage(task.status, targetStatus));
       await refetch();
     } catch (err) {
       showToast("Erreur lors de la mise à jour", false);
@@ -244,6 +274,33 @@ function TachesPage() {
       showToast("Tâche supprimée");
     } catch (err) {
       showToast("Erreur suppression", false);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const validateTask = async (task: Tache, action: "approve" | "reject") => {
+    if (!canValidateTask(task)) {
+      showToast("Vous n'êtes pas autorisé à valider cette tâche", false);
+      return;
+    }
+
+    if (action === "reject" && !window.confirm("Rejeter cette tâche et la renvoyer en cours pour correction ?")) {
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      if (action === "approve") {
+        await approveTaskValidation(task.id).unwrap();
+        showToast("Tâche approuvée et terminée");
+      } else {
+        await rejectTaskValidation(task.id).unwrap();
+        showToast("Tâche rejetée et renvoyée en cours");
+      }
+      await refetch();
+    } catch {
+      showToast(action === "approve" ? "Erreur lors de l'approbation" : "Erreur lors du rejet", false);
     } finally {
       setIsUpdating(false);
     }
@@ -482,6 +539,9 @@ function TachesPage() {
                   }
                 }}
                 onStatusChange={updateStatus}
+                canValidate={canValidateTask}
+                onApprove={task => validateTask(task, "approve")}
+                onReject={task => validateTask(task, "reject")}
                 userRole={user?.role}
                 activeTaskId={activeTask?.id ?? null}
                 onAddTask={canCreate ? () => setShowAddModal(true) : undefined}
@@ -496,6 +556,9 @@ function TachesPage() {
                   task={activeTask}
                   projectName={getProjectName}
                   onStatusChange={() => {}}
+                  canValidate={false}
+                  onApprove={() => {}}
+                  onReject={() => {}}
                   onEdit={() => {}}
                   onDelete={() => {}}
                   userRole={user?.role}

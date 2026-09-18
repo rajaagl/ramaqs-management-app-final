@@ -106,6 +106,9 @@ export function ImportExcelModal({ onClose, onSuccess }: Props) {
               <p className="mt-1 text-blue-600">
                 Les colonnes <strong>chef_projet</strong> et <strong>client</strong> , <strong>partenaire</strong> acceptent des emails.
               </p>
+              <p className="mt-1 text-blue-600">
+                Pour plusieurs secteurs, séparez les valeurs de la colonne <strong>domaine</strong> par des virgules ou des points-virgules.
+              </p>
             </div>
           </div>
 

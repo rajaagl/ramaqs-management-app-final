@@ -4,13 +4,16 @@
 // useDraggable + useDroppable(colonne) = déplacer ENTRE colonnes  ← ce qu'on veut
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Calendar, FolderKanban, Edit, Trash2, GripVertical, AlertCircle, Clock } from 'lucide-react';
+import { Calendar, FolderKanban, Edit, Trash2, GripVertical, AlertCircle, Clock, Check, RotateCcw } from 'lucide-react';
 import type { Tache } from '@/store/interfaces';
 
 interface DraggableTaskProps {
   task: Tache;
   projectName: (id: string) => string;
   onStatusChange: (task: Tache, newStatus: string) => void;
+  canValidate: boolean;
+  onApprove: (task: Tache) => void;
+  onReject: (task: Tache) => void;
   onEdit: (task: Tache) => void;
   onDelete: (id: string) => void;
   userRole: string | undefined;
@@ -25,7 +28,7 @@ const PRIORITY: Record<string, { label: string; dot: string; badge: string }> = 
 };
 
 export function DraggableTask({
-  task, projectName, onStatusChange, onEdit, onDelete, userRole, isOverlay = false,
+  task, projectName, onStatusChange, canValidate, onApprove, onReject, onEdit, onDelete, userRole, isOverlay = false,
 }: DraggableTaskProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
@@ -40,6 +43,7 @@ export function DraggableTask({
   };
 
   const canEdit   = userRole === 'direction' || userRole === 'chef_projet'||userRole === 'consultant';
+  const canChangeStatus = canEdit && task.status !== 'en_attente_validation';
   const canDelete = userRole === 'direction';
   const prio      = PRIORITY[task.priority] ?? PRIORITY.normale;
 
@@ -97,7 +101,7 @@ export function DraggableTask({
               </div>
             )}
             {/* Drag handle — SEULE zone qui déclenche le drag */}
-            {!isOverlay && (
+            {!isOverlay && canChangeStatus && (
               <div
                 {...listeners}
                 {...attributes}
@@ -156,6 +160,29 @@ export function DraggableTask({
           </div>
         )}
 
+        {task.status === 'en_attente_validation' && canValidate && !isOverlay && (
+          <div className="grid grid-cols-2 gap-2 mb-2.5">
+            <button
+              type="button"
+              onPointerDown={event => event.stopPropagation()}
+              onClick={event => { event.stopPropagation(); onApprove(task); }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Approuver
+            </button>
+            <button
+              type="button"
+              onPointerDown={event => event.stopPropagation()}
+              onClick={event => { event.stopPropagation(); onReject(task); }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Rejeter
+            </button>
+          </div>
+        )}
+
         {/* Footer : assigné + date */}
         <div className="flex items-center justify-between pt-2 border-t border-gray-50 gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -184,7 +211,7 @@ export function DraggableTask({
         </div>
 
         {/* Select statut rapide (visible au hover, désactivé dans overlay) */}
-        {canEdit && !isOverlay && (
+        {canChangeStatus && !isOverlay && (
           <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <select
               value={task.status}
@@ -195,7 +222,10 @@ export function DraggableTask({
             >
               <option value="a_faire">→ À faire</option>
               <option value="en_cours">→ En cours</option>
-              <option value="termine">→ Terminé</option>
+              <option value="en_attente_validation">→ À valider</option>
+              {task.status === 'en_attente_validation' && (
+                <option value="termine">→ Terminé</option>
+              )}
             </select>
           </div>
         )}

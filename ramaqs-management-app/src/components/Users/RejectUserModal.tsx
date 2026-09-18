@@ -89,8 +89,8 @@ export function RejectUserModal({ user, onConfirm, onCancel, isLoading }: Reject
             </p>
           )}
 
-          <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mt-4">
-             Un message whatsapp de rejet sera envoyé à l'utilisateur avec la justification.
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg mt-4">
+            Un e-mail de rejet contenant la justification sera envoyé à l’utilisateur.
           </p>
         </div>
 

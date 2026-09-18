@@ -89,16 +89,16 @@ function ResetPasswordPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-red-50 to-white">
+        <Loader2 className="h-8 w-8 animate-spin text-red-600" />
       </div>
     );
   }
 
   if (!isValidToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-        <div className="w-full max-w-md bg-card rounded-2xl shadow-2xl border border-border p-8 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-red-50 to-white p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-red-100 p-8 text-center">
           <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="h-8 w-8 text-destructive" />
           </div>
@@ -108,7 +108,7 @@ function ResetPasswordPage() {
           </p>
           <Link
             to="/forgot-password"
-            className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition"
+            className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
           >
             Nouvelle demande
           </Link>
@@ -118,11 +118,11 @@ function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-      <div className="w-full max-w-md bg-card rounded-2xl shadow-2xl border border-border p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-white via-red-50 to-white p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-red-100 p-8">
         <div className="text-center mb-8">
-          <div className="h-14 w-14 rounded-xl bg-gradient-primary flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-primary-foreground font-bold text-2xl">R</span>
+          <div className="h-14 w-14 rounded-xl bg-gradient-to-r from-red-600 to-red-700 flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <span className="text-white font-bold text-2xl">R</span>
           </div>
           <h2 className="text-2xl font-bold">Nouveau mot de passe</h2>
           <p className="text-muted-foreground mt-2">
@@ -139,7 +139,7 @@ function ResetPasswordPage() {
                 type={showPassword ? "text" : "password"}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full h-11 pl-10 pr-10 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full h-11 pl-10 pr-10 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
                 placeholder="••••••••"
               />
               <button
@@ -161,7 +161,7 @@ function ResetPasswordPage() {
                 type={showConfirmPassword ? "text" : "password"}
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="w-full h-11 pl-10 pr-10 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full h-11 pl-10 pr-10 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500"
                 placeholder="••••••••"
               />
               <button
@@ -185,7 +185,7 @@ function ResetPasswordPage() {
           <button
             type="submit"
             disabled={isResetting}
-            className="w-full h-11 rounded-xl bg-gradient-primary text-primary-foreground font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full h-11 rounded-xl bg-gradient-to-r from-red-600 to-red-700 text-white font-medium hover:from-red-700 hover:to-red-800 transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isResetting ? (
               <>
@@ -201,7 +201,7 @@ function ResetPasswordPage() {
         </form>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          <Link to="/login" className="text-primary hover:underline">
+          <Link to="/login" className="text-red-600 hover:text-red-700 hover:underline">
             ← Retour à la connexion
           </Link>
         </p>
